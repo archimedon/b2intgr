@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.rdnisn</groupId>
+  <artifactId>acrhq</artifactId>
+  <packaging>jar</packaging>
+  <version>0.0.1-SNAPSHOT</version>
+
+  <name>ActiveMQ embedded with Camel</name>
+
+	<properties>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+		<graphdb.host>localhost:7687</graphdb.host>
+		<graphdb.username>neo4j</graphdb.username>
+		<graphdb.password>reggae</graphdb.password>
+
+	</properties>
+	<repositories>
+		<repository>
+			<id>neo4j</id>
+			<url>http://m2.neo4j.org/content/repositories/releases/</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+		</repository>
+		<repository>
+			<id>jboss</id>
+			<url>https://repository.jboss.org/nexus/content/repositories/snapshots/</url>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
+	<dependencyManagement>
+
+		<dependencies>
+			<!-- CAMEL -->
+			<dependency>
+				<groupId>org.apache.camel</groupId>
+				<artifactId>camel-parent</artifactId>
+				<version>2.20.1</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+
+			<dependency>
+				<groupId>org.apache.activemq</groupId>
+				<artifactId>activemq-parent</artifactId>
+				<version>5.15.2</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+
+			<!-- HIBERNATE OGM -->
+			<dependency>
+				<groupId>org.hibernate.ogm</groupId>
+				<artifactId>hibernate-ogm-bom</artifactId>
+				<version>5.2.0.Beta1</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+
+		<!-- JPA annotations -->
+		<dependency>
+			<groupId>org.hibernate.javax.persistence</groupId>
+			<artifactId>hibernate-jpa-2.1-api</artifactId>
+		</dependency>
+
+		<!-- hibernate-ogm-neo4j -->
+		<dependency>
+			<groupId>org.hibernate.ogm</groupId>
+			<artifactId>hibernate-ogm-neo4j</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.hibernate</groupId>
+			<artifactId>hibernate-search-orm</artifactId>
+		</dependency>
+
+		<!-- Validations -->
+		<dependency>
+			<groupId>javax.validation</groupId>
+			<artifactId>validation-api</artifactId>
+			<version>2.0.0.Final</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.jboss.jbossts</groupId>
+			<artifactId>jbossjta</artifactId>
+			<version>4.16.6.Final</version>
+		</dependency>
+
+
+		<dependency>
+			<groupId>org.jboss.spec.javax.transaction</groupId>
+			<artifactId>jboss-transaction-api_1.2_spec</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+			<version>2.2</version>
+		</dependency>
+
+
+
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-http4</artifactId>
+		</dependency>
+
+
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-restlet</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-jms</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-spring</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-client</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-camel</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-pool</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-broker</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-spring</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-kahadb-store</artifactId>
+		</dependency>
+<!-- 		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-core</artifactId>
+			<version>5.7.0</version>
+		</dependency>
+ -->
+		<!-- <dependency> <groupId>org.neo4j</groupId> <artifactId>neo4j-ogm-core</artifactId> 
+			<version>3.0.0</version> <scope>compile</scope> </dependency> -->
+		<!-- Only add if you're using the Bolt driver -->
+
+		<!-- <dependency> <groupId>org.neo4j</groupId> <artifactId>neo4j-ogm-bolt-driver</artifactId> 
+			<version>3.0.0</version> <scope>runtime</scope> </dependency> -->
+		<!-- Only add if you're using the HTTP driver -->
+		<!-- <dependency> <groupId>org.neo4j</groupId> <artifactId>neo4j-ogm-http-driver</artifactId> 
+			<version>3.0.0</version> <scope>runtime</scope> </dependency> -->
+
+		<dependency>
+			<groupId>org.apache.xbean</groupId>
+			<artifactId>xbean-spring</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-slf4j-impl</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-1.2-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-test-spring</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- Testing -->
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.easytesting</groupId>
+			<artifactId>fest-assert</artifactId>
+			<version>1.4</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-jpa</artifactId>
+		</dependency>
+
+
+		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-scala</artifactId>
+		</dependency>
+
+
+
+		<dependency>
+			<groupId>javax.ws.rs</groupId>
+			<artifactId>javax.ws.rs-api</artifactId>
+			<version>2.0.1</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fasterxml.jackson.jaxrs</groupId>
+			<artifactId>jackson-jaxrs-json-provider</artifactId>
+		</dependency>
+
+
+
+<dependency>
+       <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-api</artifactId>
+       <version>1.7.5</version>
+   </dependency>
+   <dependency>
+       <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-log4j12</artifactId>
+       <version>1.7.5</version>
+   </dependency>
+	</dependencies>
+
+  <build>
+    <defaultGoal>install</defaultGoal>
+
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.6.1</version>
+        <configuration>
+          <source>1.8</source>
+          <target>1.8</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.0.2</version>
+        <configuration>
+          <encoding>UTF-8</encoding>
+        </configuration>
+      </plugin>
+
+      <!-- allows the route to be ran via 'mvn camel:run' -->
+      <plugin>
+        <groupId>org.apache.camel</groupId>
+        <artifactId>camel-maven-plugin</artifactId>
+        <version>2.20.1</version>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>

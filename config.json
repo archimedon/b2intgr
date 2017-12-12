@@ -1,0 +1,10 @@
+{
+	"host" : "localhost",
+	"port": 8080,
+	"contextUri" : "/cloudfs/api",
+	"remoteStorageConf" : {
+		"accountId" : "a374f8e3e263",
+		"applicationKey" : "0012091458045a46b01b14df849c659aebb820a53c",
+		"authenticationUrl": "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"
+	}
+}

@@ -191,7 +191,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
 		from("timer:healthCheck?period=10000")
 		.removeHeaders("*")
-		.setHeader("Authorization", constant("Basi " + headerForAuthorizeAccount))
+		.setHeader("Authorization", constant("Basic " + headerForAuthorizeAccount))
         .to(
         		authConsEndPt // http4s://api.backblazeb2.com/b2api/v1/b2_authorize_account
         		+ "?okStatusCodeRange=100-800&throwExceptionOnFailure=false"
@@ -200,10 +200,7 @@ public class ZRouteBuilder extends RouteBuilder {
         .process(authNProcessor)
         .to("file://authNProcessor")
         ;
-//		if (authNProcessor.getAuthResponse() == null) {
-//			log.info("no remote host");
-//
-//		}
+
 		/**
 		 * Configure local Rest server
 		 */

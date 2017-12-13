@@ -19,12 +19,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class AuthNProcessor implements Processor {
     final Log log = LogFactory.getLog(AuthNProcessor.class);
 	
-	private B2Response authResponse = new B2Response();
+	private B2Response authResponse = null;
 	final private ObjectMapper objectMapper;
 	
 	public AuthNProcessor(ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
-		
 	}
 
 	@Override

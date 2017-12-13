@@ -23,6 +23,7 @@ import org.apache.camel.component.restlet.RestletConstants;
 import org.apache.camel.http.common.HttpOperationFailedException;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.restlet.Request;
@@ -31,7 +32,6 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 
 /**
  * A Camel Java8 DSL Router
@@ -50,15 +50,14 @@ public class ZRouteBuilder extends RouteBuilder {
 		this.authNProcessor = new AuthNProcessor(objectMapper);
 		this.serviceConfig = 
 		objectMapper.readValue(new FileInputStream(configFile == null ?  "config.json" : configFile), CloudFSConfiguration.class);
-		
 		// enable Jackson json type converter
 		getContext().getProperties().put("CamelJacksonEnableTypeConverter", "true");
 		// allow Jackson json to convert to pojo types also (by default jackson only
 		// converts to String and other simple types)
 		getContext().getProperties().put("CamelJacksonTypeConverterToPojo", "true");
+		
 	}
 
-	 
     public void processMultiPart(final Exchange exchange) throws Exception {
         File filePayload = null;
         Object obj = exchange.getIn().getMandatoryBody();
@@ -78,17 +77,23 @@ public class ZRouteBuilder extends RouteBuilder {
 	 * Routes ...
 	 */
 	public void configure() {
-
+        
 		onException(HttpOperationFailedException.class)
         .onWhen(exchange -> {
-          HttpOperationFailedException
-              exe = exchange.getException(HttpOperationFailedException.class);
+          HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
           return exe.getStatusCode() > 204;
         })
         .log("HTTP exception handled")
         .handled(true)
         //.continued(true)
         .setBody(constant("There will be blood"));
+
+		onException(Exception.class)
+		.log("Not handled")
+		.handled(true)
+		//.continued(true)
+		.setBody(constant("There will be blood"));
+		
 		
 //		final BiFunction<String, Map<String, Object>, String > getB2URL = (String restVerb,  Map<String, Object> params) -> {
 //			return  "";
@@ -188,15 +193,46 @@ public class ZRouteBuilder extends RouteBuilder {
 //	    }
 //	    )
 //	    .endChoice();
+		
+		final Pattern pattern = Pattern.compile("(https{0,1})(.+)");
+		String b2_list_buckets="/b2api/v1/b2_list_buckets";
+		
+		Function<String, String> mkHttp4B2 = (String url) -> {
+			String str = url;
+			Matcher m = pattern.matcher(url);
+			if (m.find()) {
+				str = m.replaceFirst("$1" + "4$2"); 
+			}
+			return str + "?okStatusCodeRange=100-800&throwExceptionOnFailure=false"
+    		+ "&disableStreamCache=true&transferException=true&useSystemProperties=true";
+		};
+		
 
-		from("timer:healthCheck?period=10000")
+		Pinger ping = new Pinger(getContext(), objectMapper, serviceConfig.getRemoteAuthenticationUrl());
+
+		B2Response authResponse = ping.authenticate(headerForAuthorizeAccount);
+		
+//		from("timer:healthCheck?period=10000")
+//			.removeHeaders("*")
+//			.to(mkHttp4B2.apply(authResponse.getApiUrl()))
+//			.process(e -> { System.err.println(e.getIn().getBody()); });
+			
+
+		String apiUrl = authNProcessor.getAuthResponse() == null
+				? null
+				: StringUtils.isEmpty(authNProcessor.getAuthResponse().getApiUrl())
+					? null
+					: mkHttp4B2.apply(authNProcessor.getAuthResponse().getApiUrl());
+		
+		
+		
+	from("timer:healthCheck?period=10000")
 		.removeHeaders("*")
+        .to("bean:bean:ping?method=puff")
+
+		.to("bean:pinger?method=authenticate")
 		.setHeader("Authorization", constant("Basic " + headerForAuthorizeAccount))
-        .to(
-        		authConsEndPt // http4s://api.backblazeb2.com/b2api/v1/b2_authorize_account
-        		+ "?okStatusCodeRange=100-800&throwExceptionOnFailure=false"
-        		+ "&disableStreamCache=true&transferException=true&useSystemProperties=true"
-    		)
+        .to(mkHttp4B2.apply(serviceConfig.getRemoteAuthenticationUrl()))
         .process(authNProcessor)
         .to("file://authNProcessor")
         ;

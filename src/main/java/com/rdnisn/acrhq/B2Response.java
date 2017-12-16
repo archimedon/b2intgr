@@ -34,6 +34,9 @@ public class B2Response {
 	private String downloadUrl;
 	
 	@JsonProperty
+	private String uploadUrl;
+	
+	@JsonProperty
 	private Integer minimumPartSize;
 	
 	@JsonProperty
@@ -107,6 +110,14 @@ public class B2Response {
 		this.authorizationToken = authorizationToken;
 	}
 	
+	public String getUploadUrl() {
+		return uploadUrl;
+	}
+
+	public void setUploadUrl(String uploadUrl) {
+		this.uploadUrl = uploadUrl;
+	}
+
 	public String getDownloadUrl() {
 		return downloadUrl;
 	}

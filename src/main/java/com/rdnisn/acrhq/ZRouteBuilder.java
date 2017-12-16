@@ -47,7 +47,6 @@ public class ZRouteBuilder extends RouteBuilder {
 	final private CloudFSConfiguration serviceConfig;
 	final private ObjectMapper objectMapper;
 	final private String headerForAuthorizeAccount;
-	final private String authConsEndPt;
 	
 	public ZRouteBuilder(ObjectMapper objectMapper, String configFile) throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
@@ -59,15 +58,12 @@ public class ZRouteBuilder extends RouteBuilder {
 			(serviceConfig.getRemoteAccountId() + ":" + serviceConfig.getRemoteApplicationKey()).getBytes()
 		);
 		
-		this.authConsEndPt = getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl());
-		
 		// enable Jackson json type converter
 		getContext().getProperties().put("CamelJacksonEnableTypeConverter", "true");
 		// allow Jackson json to convert to pojo types also (by default jackson only
 		// converts to String and other simple types)
 		getContext().getProperties().put("CamelJacksonTypeConverterToPojo", "true");
 		
-		System.err.println(authConsEndPt);
 	}
 	
     public void processMultiPart(final Exchange exchange) throws Exception {
@@ -100,7 +96,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
 		Pinger ping = new Pinger(
 				getContext(), objectMapper,
-				http4Suffix(authConsEndPt), headerForAuthorizeAccount);
+				http4Suffix(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl())), headerForAuthorizeAccount);
 
 
 //		<b>b2_get_upload_url</b>
@@ -128,21 +124,25 @@ public class ZRouteBuilder extends RouteBuilder {
 				System.err.println("getuploadUrl " + getuploadUrl);
 				
 				final Message responseOut = getContext().createProducerTemplate()
-						.send(getuploadUrl, innerExchg -> {
-							
-							innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
-								put("bucketId", "2ab327a44f788e635ef20613");
-							}}));
-							
-							innerExchg.getIn().setHeader("Authorization", exchange.getIn().getHeader("Authorization"));
-						}).getOut();
+				.send(getuploadUrl, innerExchg -> {
+					
+					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
+						put("bucketId", "2ab327a44f788e635ef20613");
+					}}));
+					
+					innerExchg.getIn().setHeader("Authorization", exchange.getIn().getHeader("Authorization"));
+				}).getOut();
 				
 				int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-				String responseBody = responseOut.getBody(String.class);
+				B2Response responseBody = responseOut.getBody(B2Response.class);
 				
-				exchange.getOut().setBody(responseBody);
+				exchange.getOut().copyFrom(responseOut);
+				
+				
+				exchange.getOut().setHeader("uploadUrl", responseBody.getUploadUrl());
+				
+				System.err.println("responseBody.getUploadUrl() " + responseBody.getUploadUrl());
 				System.err.println("inner responseCode " + responseCode);
-				System.err.println("inner responseBody " + responseBody);
 			}
 		};
 
@@ -188,7 +188,7 @@ public class ZRouteBuilder extends RouteBuilder {
 	
 	
 	from("direct:upload").inputType(B2Response.class)
-	.process();
+	.process(this::examine);
 	
 	
 	/**

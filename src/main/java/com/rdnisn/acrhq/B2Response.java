@@ -43,7 +43,12 @@ public class B2Response {
 	public B2Response() {}
 	
 	public String toString () {
-		return "Code: %s, Status: %s, message %s".format(code, status.toString(), message);
+		return "B2Response:\n"
+				+ "apiUrl: " + apiUrl + "\n" 
+				+ "downloadUrl: " + downloadUrl + "\n" 
+				+ "authorizationToken: " + authorizationToken + "\n" 
+				+ "accountId: " + accountId + "\n" 
+				+ "Code: " + code;
 	}
 	
 	public String getCode() {

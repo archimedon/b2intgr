@@ -1,6 +1,8 @@
 package com.rdnisn.acrhq;
 
+import java.io.IOException;
 import java.util.Base64;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -39,135 +41,99 @@ ACCOUNT_ID=... # Comes from your account page on the Backblaze web site
 		    },
 
 */
-
-public class Pinger {
+public class Pinger implements Processor {
+	
     final private static Log log = LogFactory.getLog(Pinger.class);
-
-	
-	
-	final static Pattern pattern = Pattern.compile("(https{0,1})(.+)");
-	
+	private static final long TTL = 10;
+//	private static final long TTL = 12 * 60 * 58;
 	final private CamelContext context;
 	final private String authenticationUrl;
+	final private String token;
 	final private ObjectMapper objectMapper;
 	
 	private B2Response authResponse;
+	private static long lastmod = 0;
 	
-	public Pinger(CamelContext ctx, ObjectMapper objectMapper, String aUrl) {
+	public Pinger(CamelContext ctx, ObjectMapper objectMapper, String aUrl, String token) {
 		this.context = ctx;
-		this.authenticationUrl = mkHttp4B2(aUrl);
+		this.authenticationUrl = aUrl;
 		this.objectMapper = objectMapper;
+		this.token = token;
 		log.info("authenticationUrl: " + authenticationUrl);
 	}
+	
+	@Override
+	public void process(Exchange exchange) {
+		exchange.getOut().copyFrom(exchange.getIn());
+		authResponse = authenticate();
+		exchange.getOut().setBody(authResponse);
+		exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
+//		exchange.getOut().setHeader("apiUrl", authResponse.getApiUrl());
+//		exchange.getOut().setHeader("downloadUrl", authResponse.getDownloadUrl());
+//		exchange.getOut().setHeader("authorizationToken", authResponse.getAuthorizationToken());
+//		exchange.getOut().setHeader("accountId", authResponse.getAccountId());
+	}
 
-	public B2Response authenticate(String token) {
+	public void setAuthResponse(B2Response authResponse) {
+		this.authResponse = authResponse;
+	}
+
+	private boolean hasToken() {
+		return ! noHaveToken();
+	}
+	
+	private boolean noHaveToken() {
+		return	
+			authResponse == null	
+			|| authResponse.getAuthorizationToken() == null
+			|| ( utcInSecs() - lastmod) >= TTL;
+	}
+	
+	public B2Response authenticate() {
+		return authenticate(false);
+	}
+	
+	public B2Response authenticate(boolean force) {
 		log.info("authenticating...");
-		System.err.println("authenticating...");
+		System.err.println("Check auth stat");
 
-		ProducerTemplate template = context.createProducerTemplate();
-		System.err.println("createProducerTemplate...");
-	
-		Exchange myExch = template.send(authenticationUrl, new Processor() {
-		public void process(Exchange exchange) throws Exception {
+		if (force || lastmod <= 0 || noHaveToken() ) {
+			System.err.println("authenticating...\n@: " + authenticationUrl);
+
+			final Message responseOut = context.createProducerTemplate().send(authenticationUrl, new Processor() {
+				public void process(Exchange exchange) throws Exception {
+					System.err.println("process...");
+					exchange.getIn().removeHeaders("*");
+					exchange.getIn().setHeader("Authorization", "Basic " + token);
+				}
+			}).getOut();
 			
-			System.err.println("process...");
-			final Message IN = exchange.getIn();
+			String	responseBody = responseOut.getBody(String.class);
+			int		responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+		
+			System.err.println("responseCode " + responseCode);
 
-//			final Message OUT = exchange.getOut();
-			final String responseStr = IN.getBody(String.class);
-
-			IN.removeHeaders("*");
-			IN.setHeader("Authorization", "Basic " + token);
-
-			authResponse = objectMapper.readValue(responseStr, B2Response.class);
-//			IN.getHeaders().entrySet().forEach(entry -> map.put(entry.getKey(), entry.getValue() + ""));
-			System.err.println("authResponse getMessage " + authResponse.getMessage());
+			try {
+				authResponse = objectMapper.readValue(responseBody, B2Response.class);
+//				lastmod = hasToken() ? new Date().getTime() : -1;
+				lastmod = authResponse.getStatus() == null && authResponse.getAuthorizationToken() != null ? utcInSecs() : -1;
+				System.err.println("lastmod " + lastmod);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			
 			System.err.println("authResponse getStatus " + authResponse.getStatus());
-			System.err.println("authResponse " + authResponse);
-//
-//			
-//			Message out = myExch.getOut();
-//			int responseCode = out.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//			
-//			System.err.println("responseCode: " + responseCode);
-//			System.err.println("obod: " + out.getBody(String.class));
+			System.err.println("authResponse token " + authResponse.getAuthorizationToken());
 		}
-	});
-	
-	return authResponse;
-	}
-	
-	private String mkHttp4B2(String url) {
-		String str = url;
-		Matcher m = pattern.matcher(url);
-		if (m.find()) {
-			str = m.replaceFirst("$1" + "4$2"); 
-		}
-		return str + "?okStatusCodeRange=100-800&throwExceptionOnFailure=false"
-		+ "&disableStreamCache=true&transferException=true&useSystemProperties=true";
+		return authResponse;
 	}
 
 
-	public String getAuthenticationUrl() {
-		return authenticationUrl;
+	private long utcInSecs() {
+		return new Date().getTime() / 1000;
 	}
-
-
-
-	public ObjectMapper getObjectMapper() {
-		return objectMapper;
-	}
-
-
 
 	public B2Response getAuthResponse() {
 		return authResponse;
 	}
 }
-
-/*
-
-
-Exchange exch = context.createProducerTemplate().send(authenticationUrl, new Processor() {
-	
-	public void process(Exchange exchange) throws Exception {
-		
-		final Message IN = exchange.getIn();
-		final Message OUT = exchange.getOut();
-
-		final String responseStr = IN.getBody(String.class);
-	    byte[] body = responseStr.getBytes();
-
-		exchange.getIn().removeHeaders("*");
-		exchange.getIn().setHeader("Authorization", "Basic " + token);
-		
-		authResponse = objectMapper.readValue(responseStr, B2Response.class);
-//		IN.getHeaders().entrySet().forEach(entry -> map.put(entry.getKey(), entry.getValue() + ""));
-		System.err.println("authResponse getMessage " + authResponse.getMessage());
-		System.err.println("authResponse getStatus " + authResponse.getStatus());
-		System.err.println("authResponse " + authResponse);
-//		String json = objectMapper.writeValueAsString(authResponse);
-//		System.err.println(json);
-		OUT.setBody(responseStr);
-		IN.setBody(responseStr);
-		
-		
-		final Map<String, String> store = new HashMap<String, String>();
-		
-		IN.getHeaders().entrySet().forEach(entry ->
-		{
-			store.put(entry.getKey(), entry.getValue() + "");
-		});
-
-		
-//		exchange.getIn().setHeader(Exchange.HTTP_QUERY, constant("hl=en&q=activemq"));
-//		final Map<String, String> store = new HashMap<String, String>();
-//		store.put("request body", exchange.getIn().getBody(String.class));
-//		
-//		exchange.getIn().getHeaders().entrySet().forEach(entry ->
-//		{
-//			store.put(entry.getKey(), entry.getValue() + "");
-//		});				
-	}
-});
-*/

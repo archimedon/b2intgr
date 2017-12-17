@@ -1,10 +1,12 @@
 package com.rdnisn.acrhq;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -27,6 +29,12 @@ import org.apache.camel.model.rest.RestDefinition;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.restlet.Request;
 
 import com.fasterxml.jackson.core.JsonParseException;
@@ -36,6 +44,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static com.rdnisn.acrhq.RemoteStorageAPI.getHttp4Proto;
 import static com.rdnisn.acrhq.RemoteStorageAPI.http4Suffix;
+import static com.rdnisn.acrhq.RemoteStorageAPI.sha1;
 
 /**
  * A Camel Java8 DSL Router
@@ -207,19 +216,15 @@ public class ZRouteBuilder extends RouteBuilder {
 	.inputType(B2Response.class)
 	.process(exchange -> {
 		final B2Response authBody = exchange.getIn().getBody(B2Response.class);
-		final String listUrl = getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_list_buckets");
-		System.err.println("listUrl " + listUrl);
 		
 		final Message responseOut = getContext().createProducerTemplate()
-			.send(listUrl, innerExchg -> {
-
+			.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_list_buckets"), innerExchg -> {
 				innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
 					put("accountId", authBody.getAccountId());
 					put("bucketTypes", new ArrayList<String>() {{add("allPrivate");add("allPublic");}});
 				}}));
 				
-				System.err.println("Authorization: " + exchange.getIn().getHeader("Authorization"));
-				innerExchg.getIn().setHeader("Authorization", exchange.getIn().getHeader("Authorization"));
+				innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
 		}).getOut();
 		
 		int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
@@ -232,44 +237,140 @@ public class ZRouteBuilder extends RouteBuilder {
 		.inputType(B2Response.class)
 		.process(exchange -> {
 			final B2Response authBody = exchange.getIn().getBody(B2Response.class);
-			final String listUrl = getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url");
-			System.err.println("listUrl " + listUrl);
 			
 			final Message responseOut = getContext().createProducerTemplate()
-				.send(listUrl, innerExchg -> {
+				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
 
 					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
 						put("bucketId", "2ab327a44f788e635ef20613");
 					}}));
 					
-					System.err.println("Authorization: " + authBody.getAuthorizationToken());
+					System.err.println("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
+					System.err.println("Authorization USED: " + authBody.getAuthorizationToken());
 					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
 			}).getOut();
 			
-			int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-			String responseBody = responseOut.getBody(String.class);
-			
 			try {
-				B2Response authResponse = objectMapper.readValue(responseBody, B2Response.class);
-				System.err.println("responseBody: " + responseBody);
+				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
 
 				exchange.getOut().setBody(authResponse);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			System.err.println("inner responseCode " + responseCode);
 			
 		});
-	
+
+/*
+
+curl \
+    -H "Authorization: $UPLOAD_AUTHORIZATION_TOKEN" \
+    -H "X-Bz-File-Name: ${FILE_REMOTE_NAME}" \
+    -H "Content-Type: $MIME_TYPE" \
+    -H "X-Bz-Content-Sha1: $SHA1_OF_FILE" \
+    -H "X-Bz-Info-Author: unknown" \
+    --data-binary "@$FILE_TO_UPLOAD" \
+    $UPLOAD_URL    
+
+*/
 	
 	from("direct:upload")
 		.inputType(B2Response.class)
-		.process(ex -> {
-			ex.getOut().copyFrom(ex.getIn());
-//			B2Response authResponse = objectMapper.readValue(ex.getIn().getBody(String.class), B2Response.class);
-//			ex.getOut().setBody(authResponse.getDownloadUrl());
+		.process(exchange -> {
+			final B2Response authBody = exchange.getIn().getBody(B2Response.class);
+			final String uploadUrl = getHttp4Proto(authBody.getUploadUrl());
+			System.err.println("uploadUrl " + authBody.getUploadUrl());
+
+			 MultipartEntity entity = new MultipartEntity();
+			 File upfile = new File("ReadMe.txt");
+			 System.err.println("upfile.length() " + upfile.length());
+			 System.err.println("sha1(upfile) " + sha1(upfile));
+			 
+			    entity.addPart("file", new FileBody(upfile));
+
+			    String SHA = sha1(upfile);
+			    
+			    HttpPost request = new HttpPost(authBody.getUploadUrl());
+			    request.setHeader("Authorization", authBody.getAuthorizationToken());
+//			    request.setHeader("Content-Length", (upfile.length()  ) + "");
+			    request.setHeader("X-Bz-File-Name", "ReadMe.txt");
+//			    request.setHeader("Content-Type", "text/plain");
+			    request.setHeader("Content-Type", "b2/x-auto");
+			    request.setHeader("X-Bz-Content-Sha1", SHA);
+			    request.setHeader("X-Bz-Info-Author", "web");
+			    request.setEntity(entity);
+
+			    
+//			    HttpEntity entity = MultipartEntityBuilder.create()
+//			    		.addTextBody("field1", "value1")
+//			    		.addBinaryBody("myfile", new File("ReadMe.txt"), ContentType.create("application/octet-stream"), "file1.txt")
+//			    		.build();
+//			    		
+			    		
+			    
+			    HttpClient client = new DefaultHttpClient();
+			    HttpResponse response = client.execute(request);
+			    
+			    
+//			final Message responseOut = getContext().createProducerTemplate()
+//				.send(uploadUrl, innerExchg -> {
+//
+//					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
+//						put("bucketId", "2ab327a44f788e635ef20613");
+//					}}));
+//					
+//					System.err.println("Authorization: " + authBody.getAuthorizationToken());
+//					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
+////					innerExchg.getIn().setHeader("X-Bz-File-Name", "request.filename");
+////					innerExchg.getIn().setHeader("Content-Type", "jpeg");
+////					innerExchg.getIn().setHeader("X-Bz-Content-Sha1", "genSha1()");
+////					innerExchg.getIn().setHeader("X-Bz-Info-Author", "web");
+//			}).getOut();
+//
+////			exchange.getOut().copyFrom(responseOut);
+//			int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+//			System.err.println("uploadUrl responseCode " + responseCode);
+//			exchange.getOut().setBody(responseOut.getBody());
+//			
+			System.err.println("uploadUrl getStatusLine " + response.getStatusLine());
+			System.err.println("uploadUrl getAllHeaders " + response.getAllHeaders());
+			
+			
+			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
+			response.getEntity().writeTo(buf);
+			exchange.getOut().setBody(buf.toString("UTF-8"));
+//			buf.close();
 		});
-	
+
+/*
+@Override
+    public void process(Exchange exchange) throws Exception {
+
+        MediaType mediaType = 
+            exchange.getIn().getHeader(Exchange.CONTENT_TYPE, MediaType.class);
+        InputRepresentation representation =
+            new InputRepresentation(
+                exchange.getIn().getBody(InputStream.class), mediaType);
+
+        try {
+            List<FileItem> items = 
+                new RestletFileUpload(
+                    new DiskFileItemFactory()).parseRepresentation(representation);
+
+            for (FileItem item : items) {
+                if (!item.isFormField()) {
+                    InputStream inputStream = item.getInputStream();
+                    Path destination = Paths.get("MyFile.jpg");
+                    Files.copy(inputStream, destination,
+                                StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        } catch (FileUploadException | IOException e) {
+            e.printStackTrace();
+        }
+
+
+    }
+ */
 	
 	/**
 	 * Configure local Rest server

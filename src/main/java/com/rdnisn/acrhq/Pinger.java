@@ -100,14 +100,16 @@ public class Pinger implements Processor {
 		if (force || lastmod <= 0 || noHaveToken() ) {
 			System.err.println("authenticating...\n@: " + authenticationUrl);
 
-			final Message responseOut = context.createProducerTemplate().send(authenticationUrl, new Processor() {
+			final ProducerTemplate b2producerTemplate = context.createProducerTemplate();
+			
+			final Message responseOut = b2producerTemplate.send(authenticationUrl, new Processor() {
 				public void process(Exchange exchange) throws Exception {
 					System.err.println("process...");
 					exchange.getIn().removeHeaders("*");
 					exchange.getIn().setHeader("Authorization", "Basic " + token);
 				}
 			}).getOut();
-			
+
 			String	responseBody = responseOut.getBody(String.class);
 			int		responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 		
@@ -118,11 +120,13 @@ public class Pinger implements Processor {
 //				lastmod = hasToken() ? new Date().getTime() : -1;
 				lastmod = authResponse.getStatus() == null && authResponse.getAuthorizationToken() != null ? utcInSecs() : -1;
 				System.err.println("lastmod " + lastmod);
+				b2producerTemplate.stop();
 			} catch (IOException e) {
+				e.printStackTrace();
+			} catch (Exception e) {
 				e.printStackTrace();
 			}
 			
-			System.err.println("authResponse getStatus " + authResponse.getStatus());
 			System.err.println("authResponse token " + authResponse.getAuthorizationToken());
 		}
 		return authResponse;

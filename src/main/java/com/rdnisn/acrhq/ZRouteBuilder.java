@@ -85,13 +85,13 @@ public class ZRouteBuilder extends RouteBuilder {
         .log("HTTP exception handled")
         .handled(true)
         //.continued(true)
-        .setBody(constant("There will be blood"));
+        .setBody(constant("There will be HttpOperationFailedException blood"));
 
 		onException(Exception.class)
 		.log("Not handled")
 		.handled(true)
 		//.continued(true)
-		.setBody(constant("There will be blood"));
+		.setBody(constant("There will be Exception blood"));
 		
 
 		Pinger ping = new Pinger(
@@ -113,36 +113,80 @@ public class ZRouteBuilder extends RouteBuilder {
 //		  "uploadUrl": "https://pod-000-1090-17.backblaze.com/b2api/v1/b2_upload_file/fa73d7e42f083e836e020613/c001_v0001090_t0028"
 //		}exchange ->
 		
-		Processor getUploadUrlProcessor = new Processor() {
-			
+		final Processor getUploadUrlProcessor = new Processor() {
 			
 			@Override
-			public void process(Exchange exchange) throws Exception {
-				// TODO Auto-generated method stub
+			public void process(final Exchange exchange) throws Exception {
+				System.err.println("getUploadUrlProcessor->process");
+
 				final B2Response authBody = exchange.getIn().getBody(B2Response.class);
-				final String getuploadUrl = getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url");
+				System.err.println("getUploadUrlProcessor->process [authBody]:\n" + authBody);
+				
+//				exchange.getOut().copyFrom(exchange.getIn());
+				exchange.getOut().setBody(objectMapper.writeValueAsString("empty"));
+//				final String getuploadUrl = http4Suffix(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"));
+				final String getuploadUrl = getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"); // + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true&disableStreamCache=false";
 				System.err.println("getuploadUrl " + getuploadUrl);
+//				
+				exchange.getIn().getHeaders().entrySet().forEach(entry ->
+				{
+					System.err.println("Exchange-1 key: " + entry.getKey() + " val: " + entry.getValue());
+				});
+
+
+				final ProducerTemplate b2producerTemplate = getContext().createProducerTemplate();
 				
-				final Message responseOut = getContext().createProducerTemplate()
-				.send(getuploadUrl, innerExchg -> {
-					
-					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
+				final Exchange responseExchange = b2producerTemplate.send(getuploadUrl, innerExchg -> {
+
+					String jstr = objectMapper.writeValueAsString(new HashMap<String, Object>() {{
 						put("bucketId", "2ab327a44f788e635ef20613");
-					}}));
-					
-					innerExchg.getIn().setHeader("Authorization", exchange.getIn().getHeader("Authorization"));
-				}).getOut();
+					}});
+					innerExchg.getIn().setBody(jstr);
+					innerExchg.getIn().getHeaders().entrySet().forEach(entry ->
+					{
+						System.err.println("innerExchg-2 key: " + entry.getKey() + " val: " + entry.getValue());
+					});
+
+//					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
+				});
 				
-				int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-				B2Response responseBody = responseOut.getBody(B2Response.class);
+				final Message respIn = responseExchange.getIn();
+				final Message respOut = responseExchange.getOut();
+				respOut.getHeaders().entrySet().forEach(entry ->
+				{
+					System.err.println("respOut-1 key: " + entry.getKey() + " val: " + entry.getValue());
+				});
+
+				respIn.getHeaders().entrySet().forEach(entry ->
+				{
+					System.err.println("respIn-1 key: " + entry.getKey() + " val: " + entry.getValue());
+				});
 				
-				exchange.getOut().copyFrom(responseOut);
+				System.err.println("respIn: " + respIn.getBody());
+				System.err.println("respOut: " + respOut.getBody());
+				b2producerTemplate.stop();
+				System.err.println("b2producerTemplate\n");
+//				exchange.getOut().setBody("SET");
 				
+//				b2producerTemplate
+//				System.err.println("***** Body Type: " + responseOut.getBody().getClass().getCanonicalName());
+//				System.err.println("***** Body Type: " + responseOut.getBody().getClass().getCanonicalName());
+//				
+//				org.apache.camel.converter.stream.CachedOutputStream wrs = responseOut.getBody(org.apache.camel.converter.stream.CachedOutputStream.class);
 				
-				exchange.getOut().setHeader("uploadUrl", responseBody.getUploadUrl());
+//				System.err.println("***** In msg2  : " + responseOut.getBody(String.class));
+
+
+				//				B2Response responseBody = responseOut.getBody(B2Response.class);
 				
-				System.err.println("responseBody.getUploadUrl() " + responseBody.getUploadUrl());
-				System.err.println("inner responseCode " + responseCode);
+//				exchange.getOut().copyFrom(responseOut);
+				
+//				exchange.getOut().setHeader("uploadUrl", responseBody.getUploadUrl());
+				
+//				System.err.println("responseBody.getUploadUrl() " + responseBody.getUploadUrl());
+//				System.err.println("getUploadUrlProcessor getBody " + responseOut.getBody());
+//				int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+//				System.err.println("getUploadUrlProcessor responseCode " + responseCode);
 			}
 		};
 
@@ -159,7 +203,8 @@ public class ZRouteBuilder extends RouteBuilder {
 		.pipeline().to("direct:auth", "direct:get_up_url", "direct:upload");
 	
 	
-	from("direct:listdir").inputType(B2Response.class)
+	from("direct:listdir")
+	.inputType(B2Response.class)
 	.process(exchange -> {
 		final B2Response authBody = exchange.getIn().getBody(B2Response.class);
 		final String listUrl = getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_list_buckets");
@@ -184,11 +229,46 @@ public class ZRouteBuilder extends RouteBuilder {
 	});
 	
 	from("direct:get_up_url")
-		.process(getUploadUrlProcessor);
+		.inputType(B2Response.class)
+		.process(exchange -> {
+			final B2Response authBody = exchange.getIn().getBody(B2Response.class);
+			final String listUrl = getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url");
+			System.err.println("listUrl " + listUrl);
+			
+			final Message responseOut = getContext().createProducerTemplate()
+				.send(listUrl, innerExchg -> {
+
+					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
+						put("bucketId", "2ab327a44f788e635ef20613");
+					}}));
+					
+					System.err.println("Authorization: " + authBody.getAuthorizationToken());
+					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
+			}).getOut();
+			
+			int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+			String responseBody = responseOut.getBody(String.class);
+			
+			try {
+				B2Response authResponse = objectMapper.readValue(responseBody, B2Response.class);
+				System.err.println("responseBody: " + responseBody);
+
+				exchange.getOut().setBody(authResponse);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			System.err.println("inner responseCode " + responseCode);
+			
+		});
 	
 	
-	from("direct:upload").inputType(B2Response.class)
-	.process(this::examine);
+	from("direct:upload")
+		.inputType(B2Response.class)
+		.process(ex -> {
+			ex.getOut().copyFrom(ex.getIn());
+//			B2Response authResponse = objectMapper.readValue(ex.getIn().getBody(String.class), B2Response.class);
+//			ex.getOut().setBody(authResponse.getDownloadUrl());
+		});
 	
 	
 	/**
@@ -329,24 +409,24 @@ public class ZRouteBuilder extends RouteBuilder {
 
 	private void examine(Exchange exchange) {
 		
-		final Map<String, String> storeOut = new HashMap<String, String>();
-		final Map<String, String> store = new HashMap<String, String>();
-		store.put("IN.body: ", exchange.getIn().getBody(String.class));
-		
-		exchange.getIn().getHeaders().entrySet().forEach(entry ->
-		{
-			store.put(entry.getKey(), entry.getValue() + "");
-		});
-
-		storeOut.put("OUT.body: ", exchange.getOut().getBody(String.class));
-		
-		exchange.getOut().getHeaders().entrySet().forEach(entry ->
-		{
-			storeOut.put(entry.getKey(), entry.getValue() + "");
-		});
-		System.err.println("STORE: " + store);
-		System.err.println("STORE toreOut: " + storeOut);
-
-		exchange.getOut().setBody(store);
+//		final Map<String, String> storeOut = new HashMap<String, String>();
+//		final Map<String, String> store = new HashMap<String, String>();
+//		store.put("IN.body: ", exchange.getIn().getBody(String.class));
+//		
+//		exchange.getIn().getHeaders().entrySet().forEach(entry ->
+//		{
+//			store.put(entry.getKey(), entry.getValue() + "");
+//		});
+//
+//		storeOut.put("OUT.body: ", exchange.getOut().getBody(String.class));
+//		
+//		exchange.getOut().getHeaders().entrySet().forEach(entry ->
+//		{
+//			storeOut.put(entry.getKey(), entry.getValue() + "");
+//		});
+//		System.err.println("STORE: " + store);
+//		System.err.println("STORE toreOut: " + storeOut);
+//
+//		exchange.getOut().setBody(store);
 	}
 }

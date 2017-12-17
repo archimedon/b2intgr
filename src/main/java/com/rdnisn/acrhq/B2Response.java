@@ -22,6 +22,9 @@ public class B2Response {
 	private String accountId;
 	
 	@JsonProperty
+	private String bucketId;
+	
+	@JsonProperty
 	private Integer absoluteMinimumPartSize;
 	
 	@JsonProperty
@@ -49,6 +52,8 @@ public class B2Response {
 		return "B2Response:\n"
 				+ "apiUrl: " + apiUrl + "\n" 
 				+ "downloadUrl: " + downloadUrl + "\n" 
+				+ "uploadUrl: " + uploadUrl + "\n" 
+				+ "bucketId: " + bucketId + "\n" 
 				+ "authorizationToken: " + authorizationToken + "\n" 
 				+ "accountId: " + accountId + "\n" 
 				+ "Code: " + code;
@@ -56,6 +61,14 @@ public class B2Response {
 	
 	public String getCode() {
 		return code;
+	}
+
+	public String getBucketId() {
+		return bucketId;
+	}
+
+	public void setBucketId(String bucketId) {
+		this.bucketId = bucketId;
 	}
 
 	public void setCode(String code) {

@@ -291,14 +291,19 @@ curl \
 			    
 			    HttpPost request = new HttpPost(authBody.getUploadUrl());
 			    request.setHeader("Authorization", authBody.getAuthorizationToken());
-//			    request.setHeader("Content-Length", (upfile.length()  ) + "");
-			    request.setHeader("X-Bz-File-Name", "ReadMe.txt");
-//			    request.setHeader("Content-Type", "text/plain");
 			    request.setHeader("Content-Type", "b2/x-auto");
-			    request.setHeader("X-Bz-Content-Sha1", SHA);
-			    request.setHeader("X-Bz-Info-Author", "web");
+//			    request.setHeader("Content-Length", upfile.length() + "");
+			    request.setHeader("X-Bz-Content-Sha1", "do_not_verify");
+			    request.setHeader("X-Bz-File-Name", "dennison-test.ReadMe.txt");
+//			    request.setHeader("Content-Type", "text/plain");
+//			    request.setHeader("X-Bz-Info-Author", "unknown");
 			    request.setEntity(entity);
 
+			    System.err.println("request");
+			    for (org.apache.http.Header h: request.getAllHeaders()) {
+			    		System.err.println(h.getName() + " : " +  h.getValue());
+			    }
+			    
 			    
 //			    HttpEntity entity = MultipartEntityBuilder.create()
 //			    		.addTextBody("field1", "value1")
@@ -309,8 +314,11 @@ curl \
 			    
 			    HttpClient client = new DefaultHttpClient();
 			    HttpResponse response = client.execute(request);
-			    
-			    
+			    System.err.println("response:");
+			    for (org.apache.http.Header h: response.getAllHeaders()) {
+		    		System.err.println(h.getName() + " : " +  h.getValue());
+			    }
+
 //			final Message responseOut = getContext().createProducerTemplate()
 //				.send(uploadUrl, innerExchg -> {
 //
@@ -332,7 +340,6 @@ curl \
 //			exchange.getOut().setBody(responseOut.getBody());
 //			
 			System.err.println("uploadUrl getStatusLine " + response.getStatusLine());
-			System.err.println("uploadUrl getAllHeaders " + response.getAllHeaders());
 			
 			
 			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();

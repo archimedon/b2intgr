@@ -10,6 +10,7 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -26,6 +27,7 @@ import org.apache.camel.component.restlet.RestletConstants;
 import org.apache.camel.http.common.HttpOperationFailedException;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
+import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -36,6 +38,8 @@ import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.restlet.Request;
+import org.restlet.data.MediaType;
+import org.restlet.representation.InputRepresentation;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -122,83 +126,6 @@ public class ZRouteBuilder extends RouteBuilder {
 //		  "uploadUrl": "https://pod-000-1090-17.backblaze.com/b2api/v1/b2_upload_file/fa73d7e42f083e836e020613/c001_v0001090_t0028"
 //		}exchange ->
 		
-		final Processor getUploadUrlProcessor = new Processor() {
-			
-			@Override
-			public void process(final Exchange exchange) throws Exception {
-				System.err.println("getUploadUrlProcessor->process");
-
-				final B2Response authBody = exchange.getIn().getBody(B2Response.class);
-				System.err.println("getUploadUrlProcessor->process [authBody]:\n" + authBody);
-				
-//				exchange.getOut().copyFrom(exchange.getIn());
-				exchange.getOut().setBody(objectMapper.writeValueAsString("empty"));
-//				final String getuploadUrl = http4Suffix(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"));
-				final String getuploadUrl = getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"); // + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true&disableStreamCache=false";
-				System.err.println("getuploadUrl " + getuploadUrl);
-//				
-				exchange.getIn().getHeaders().entrySet().forEach(entry ->
-				{
-					System.err.println("Exchange-1 key: " + entry.getKey() + " val: " + entry.getValue());
-				});
-
-
-				final ProducerTemplate b2producerTemplate = getContext().createProducerTemplate();
-				
-				final Exchange responseExchange = b2producerTemplate.send(getuploadUrl, innerExchg -> {
-
-					String jstr = objectMapper.writeValueAsString(new HashMap<String, Object>() {{
-						put("bucketId", "2ab327a44f788e635ef20613");
-					}});
-					innerExchg.getIn().setBody(jstr);
-					innerExchg.getIn().getHeaders().entrySet().forEach(entry ->
-					{
-						System.err.println("innerExchg-2 key: " + entry.getKey() + " val: " + entry.getValue());
-					});
-
-//					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
-				});
-				
-				final Message respIn = responseExchange.getIn();
-				final Message respOut = responseExchange.getOut();
-				respOut.getHeaders().entrySet().forEach(entry ->
-				{
-					System.err.println("respOut-1 key: " + entry.getKey() + " val: " + entry.getValue());
-				});
-
-				respIn.getHeaders().entrySet().forEach(entry ->
-				{
-					System.err.println("respIn-1 key: " + entry.getKey() + " val: " + entry.getValue());
-				});
-				
-				System.err.println("respIn: " + respIn.getBody());
-				System.err.println("respOut: " + respOut.getBody());
-				b2producerTemplate.stop();
-				System.err.println("b2producerTemplate\n");
-//				exchange.getOut().setBody("SET");
-				
-//				b2producerTemplate
-//				System.err.println("***** Body Type: " + responseOut.getBody().getClass().getCanonicalName());
-//				System.err.println("***** Body Type: " + responseOut.getBody().getClass().getCanonicalName());
-//				
-//				org.apache.camel.converter.stream.CachedOutputStream wrs = responseOut.getBody(org.apache.camel.converter.stream.CachedOutputStream.class);
-				
-//				System.err.println("***** In msg2  : " + responseOut.getBody(String.class));
-
-
-				//				B2Response responseBody = responseOut.getBody(B2Response.class);
-				
-//				exchange.getOut().copyFrom(responseOut);
-				
-//				exchange.getOut().setHeader("uploadUrl", responseBody.getUploadUrl());
-				
-//				System.err.println("responseBody.getUploadUrl() " + responseBody.getUploadUrl());
-//				System.err.println("getUploadUrlProcessor getBody " + responseOut.getBody());
-//				int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//				System.err.println("getUploadUrlProcessor responseCode " + responseCode);
-			}
-		};
-
 
 //	from("timer:healthCheck?period=2000")
 //	  .pipeline().to("direct:auth", "direct:listdir"); // .to(ping, new AuthNProcessor(objectMapper))
@@ -213,10 +140,11 @@ public class ZRouteBuilder extends RouteBuilder {
 	
 	
 	from("direct:listdir")
-	.inputType(B2Response.class)
 	.process(exchange -> {
-		final B2Response authBody = exchange.getIn().getBody(B2Response.class);
 		
+		final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
+		exchange.getOut().copyFrom(exchange.getIn());
+
 		final Message responseOut = getContext().createProducerTemplate()
 			.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_list_buckets"), innerExchg -> {
 				innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
@@ -228,16 +156,18 @@ public class ZRouteBuilder extends RouteBuilder {
 		}).getOut();
 		
 		int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-		String responseBody = responseOut.getBody(String.class);
-		exchange.getOut().setBody(responseBody);
+		
+		exchange.getOut().setBody(responseOut.getBody(String.class));
 		System.err.println("inner responseCode " + responseCode);
 	});
 	
 	from("direct:get_up_url")
-		.inputType(B2Response.class)
+		.inputType(File.class)
 		.process(exchange -> {
-			final B2Response authBody = exchange.getIn().getBody(B2Response.class);
-			
+			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
+			exchange.getOut().copyFrom(exchange.getIn());
+			System.err.println("direct:get_up_url authBody " + authBody);
+
 			final Message responseOut = getContext().createProducerTemplate()
 				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
 
@@ -252,8 +182,9 @@ public class ZRouteBuilder extends RouteBuilder {
 			
 			try {
 				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
-
-				exchange.getOut().setBody(authResponse);
+				authBody.setUploadUrl(authResponse.getUploadUrl());
+				authBody.setBucketId(authResponse.getBucketId());
+				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -274,12 +205,48 @@ curl \
 */
 	
 	from("direct:upload")
-		.inputType(B2Response.class)
+		.inputType(File.class)
 		.process(exchange -> {
-			final B2Response authBody = exchange.getIn().getBody(B2Response.class);
+			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
+			exchange.getOut().copyFrom(exchange.getIn());
+
 			final String uploadUrl = getHttp4Proto(authBody.getUploadUrl());
 			System.err.println("uploadUrl " + authBody.getUploadUrl());
 
+			Message messageIn = exchange.getIn();
+		    String contentType = messageIn.getHeader(Exchange.CONTENT_TYPE, String.class);
+		    String name = messageIn.getHeader(Exchange.FILE_NAME, String.class);
+		    File file = messageIn.getBody(java.io.File.class);
+		    
+			 System.err.println("contentType: " + contentType);
+			 System.err.println("name: " + name);
+			 System.err.println("file: " + file);
+
+//			 MediaType mediaType = 
+//			            exchange.getIn().getHeader(Exchange.CONTENT_TYPE, MediaType.class);
+//			        InputRepresentation representation =
+//			            new InputRepresentation(
+//			                exchange.getIn().getBody(InputStream.class), mediaType);
+//
+//			        try {
+//			            List<FileItem> items = 
+//			                new RestletFileUpload(
+//			                    new DiskFileItemFactory()).parseRepresentation(representation);
+//
+//			            for (FileItem item : items) {
+//			                if (!item.isFormField()) {
+//			                    InputStream inputStream = item.getInputStream();
+//			                    Path destination = Paths.get("MyFile.jpg");
+//			                    Files.copy(inputStream, destination,
+//			                                StandardCopyOption.REPLACE_EXISTING);
+//			                }
+//			            }
+//			        } catch (FileUploadException | IOException e) {
+//			            e.printStackTrace();
+//			        }
+
+			
+			
 			 MultipartEntity entity = new MultipartEntity();
 			 File upfile = new File("ReadMe.txt");
 			 System.err.println("upfile.length() " + upfile.length());
@@ -407,6 +374,16 @@ curl \
 //        .delete("/rm/{filePath}").to("direct:listDirectory")
         ;
 	
+	}
+	
+	public void uploadData(Message messageIn) {
+	    String contentType = messageIn.getHeader(Exchange.CONTENT_TYPE, String.class);
+	    String name = messageIn.getHeader(Exchange.FILE_NAME, String.class);
+	    File file = messageIn.getBody(java.io.File.class);
+	    
+	}
+
+
 //    from("direct:uploadFile").        
 //	to("log:block");
 //    from("direct:putFile").to("file://putFile");
@@ -432,21 +409,21 @@ curl \
 //         .get("/{fileId}").to("direct:getFile")
 //         .delete("/{fileId}").to("direct:deleteFile")
 //         ;
-
-         
+	
+	
 //Message out = exchange.getOut();
 //int responseCode = out.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 //
 //System.err.println("responseCode: " + responseCode);
 //System.err.println("obod: " + out.getBody(String.class));
 //	});
-
+	
 //	exchange.getOut().copyFrom(exchange.getIn());
 //	authResponse = authenticate();
 //	exchange.getOut().setBody(authResponse);
 //	exchange.getOut().removeHeaders("*");
 //	exchange.getOut().setHeader("Authorization",  authResponse.getAuthorizationToken());
-
+	
 //	.setHeader("Authorization", constant("Basic ${header.authorizationToken}"))
 //	.to("http4://google.com")
 	;
@@ -484,16 +461,16 @@ curl \
 //	}
 //
 //	});
-	  //        .to("bean:bean:ping?method=puff")
+	//        .to("bean:bean:ping?method=puff")
 //
 //		.to("bean:pinger?method=authenticate")
 //		.setHeader("Authorization", constant("Basic " + headerForAuthorizeAccount))
 //        .to(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl()))
 //        .process(authNProcessor)
 //        .to("file://authNProcessor")
-        ;
-
-
+	;
+	
+	
 //			Map<String, String> obj = new HashMap<String, String>();
 //			obj.put("ans", "reply");
 //			String jsonInString ="Nope";
@@ -504,37 +481,13 @@ curl \
 //				e.printStackTrace();
 //			}
 //			log.info(jsonInString);
-		 
+	
 //		 from("direct:uploadFile")
 //		 	.process("b2ResponseProcessor(objectMapper)")
 //		 	.transform(body().regexReplaceAll("\n", "<br/>"))
 //		 	.wireTap("activemq:remoteUploadFile")
 //		 	.to(getB2URL.apply("POST", new HashMap()))
-			 
-			 // process the response
+	
+	// process the response
 //			 .process(echoP);
-	}
-
-	private void examine(Exchange exchange) {
-		
-//		final Map<String, String> storeOut = new HashMap<String, String>();
-//		final Map<String, String> store = new HashMap<String, String>();
-//		store.put("IN.body: ", exchange.getIn().getBody(String.class));
-//		
-//		exchange.getIn().getHeaders().entrySet().forEach(entry ->
-//		{
-//			store.put(entry.getKey(), entry.getValue() + "");
-//		});
-//
-//		storeOut.put("OUT.body: ", exchange.getOut().getBody(String.class));
-//		
-//		exchange.getOut().getHeaders().entrySet().forEach(entry ->
-//		{
-//			storeOut.put(entry.getKey(), entry.getValue() + "");
-//		});
-//		System.err.println("STORE: " + store);
-//		System.err.println("STORE toreOut: " + storeOut);
-//
-//		exchange.getOut().setBody(store);
-	}
 }

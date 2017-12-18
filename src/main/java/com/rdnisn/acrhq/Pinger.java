@@ -45,6 +45,7 @@ public class Pinger implements Processor {
 	
     final private static Log log = LogFactory.getLog(Pinger.class);
 	private static final long TTL = 10;
+	public static final String B2AUTHN = "B2AUTHN";
 //	private static final long TTL = 12 * 60 * 58;
 	final private CamelContext context;
 	final private String authenticationUrl;
@@ -66,7 +67,9 @@ public class Pinger implements Processor {
 	public void process(Exchange exchange) {
 		exchange.getOut().copyFrom(exchange.getIn());
 		authResponse = authenticate();
-		exchange.getOut().setBody(authResponse);
+		System.out.println("Pinger-AuthRep: " + authResponse);
+		System.out.println("Pinger-HASBODY: " + exchange.getIn().getBody());
+		exchange.getOut().setHeader(B2AUTHN, authResponse);
 		exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
 //		exchange.getOut().setHeader("apiUrl", authResponse.getApiUrl());
 //		exchange.getOut().setHeader("downloadUrl", authResponse.getDownloadUrl());

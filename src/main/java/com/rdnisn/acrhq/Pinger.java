@@ -1,5 +1,6 @@
 package com.rdnisn.acrhq;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.Date;
@@ -67,10 +68,15 @@ public class Pinger implements Processor {
 	public void process(Exchange exchange) {
 		exchange.getOut().copyFrom(exchange.getIn());
 		authResponse = authenticate();
-		System.out.println("Pinger-AuthRep: " + authResponse);
-		System.out.println("Pinger-HASBODY: " + exchange.getIn().getBody());
 		exchange.getOut().setHeader(B2AUTHN, authResponse);
 		exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
+		
+//		System.out.println("Pinger-AuthRep: " + authResponse);
+//		Object obj = exchange.getIn().getBody();
+//		if (obj != null) {
+//			exchange.getOut().setBody(obj);
+//			System.out.println("Pinger-HASBODY: Ywah");
+//		}
 //		exchange.getOut().setHeader("apiUrl", authResponse.getApiUrl());
 //		exchange.getOut().setHeader("downloadUrl", authResponse.getDownloadUrl());
 //		exchange.getOut().setHeader("authorizationToken", authResponse.getAuthorizationToken());

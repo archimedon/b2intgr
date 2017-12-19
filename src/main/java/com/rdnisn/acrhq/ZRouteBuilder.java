@@ -222,28 +222,6 @@ curl \
 			 System.err.println("name: " + name);
 			 System.err.println("file: " + file);
 
-//			 MediaType mediaType = 
-//			            exchange.getIn().getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-//			        InputRepresentation representation =
-//			            new InputRepresentation(
-//			                exchange.getIn().getBody(InputStream.class), mediaType);
-//
-//			        try {
-//			            List<FileItem> items = 
-//			                new RestletFileUpload(
-//			                    new DiskFileItemFactory()).parseRepresentation(representation);
-//
-//			            for (FileItem item : items) {
-//			                if (!item.isFormField()) {
-//			                    InputStream inputStream = item.getInputStream();
-//			                    Path destination = Paths.get("MyFile.jpg");
-//			                    Files.copy(inputStream, destination,
-//			                                StandardCopyOption.REPLACE_EXISTING);
-//			                }
-//			            }
-//			        } catch (FileUploadException | IOException e) {
-//			            e.printStackTrace();
-//			        }
 
 			
 			
@@ -272,11 +250,6 @@ curl \
 			    }
 			    
 			    
-//			    HttpEntity entity = MultipartEntityBuilder.create()
-//			    		.addTextBody("field1", "value1")
-//			    		.addBinaryBody("myfile", new File("ReadMe.txt"), ContentType.create("application/octet-stream"), "file1.txt")
-//			    		.build();
-//			    		
 			    		
 			    
 			    HttpClient client = new DefaultHttpClient();
@@ -286,25 +259,6 @@ curl \
 		    		System.err.println(h.getName() + " : " +  h.getValue());
 			    }
 
-//			final Message responseOut = getContext().createProducerTemplate()
-//				.send(uploadUrl, innerExchg -> {
-//
-//					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
-//						put("bucketId", "2ab327a44f788e635ef20613");
-//					}}));
-//					
-//					System.err.println("Authorization: " + authBody.getAuthorizationToken());
-//					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
-////					innerExchg.getIn().setHeader("X-Bz-File-Name", "request.filename");
-////					innerExchg.getIn().setHeader("Content-Type", "jpeg");
-////					innerExchg.getIn().setHeader("X-Bz-Content-Sha1", "genSha1()");
-////					innerExchg.getIn().setHeader("X-Bz-Info-Author", "web");
-//			}).getOut();
-//
-////			exchange.getOut().copyFrom(responseOut);
-//			int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//			System.err.println("uploadUrl responseCode " + responseCode);
-//			exchange.getOut().setBody(responseOut.getBody());
 //			
 			System.err.println("uploadUrl getStatusLine " + response.getStatusLine());
 			
@@ -312,39 +266,8 @@ curl \
 			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
 			response.getEntity().writeTo(buf);
 			exchange.getOut().setBody(buf.toString("UTF-8"));
-//			buf.close();
 		});
 
-/*
-@Override
-    public void process(Exchange exchange) throws Exception {
-
-        MediaType mediaType = 
-            exchange.getIn().getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-        InputRepresentation representation =
-            new InputRepresentation(
-                exchange.getIn().getBody(InputStream.class), mediaType);
-
-        try {
-            List<FileItem> items = 
-                new RestletFileUpload(
-                    new DiskFileItemFactory()).parseRepresentation(representation);
-
-            for (FileItem item : items) {
-                if (!item.isFormField()) {
-                    InputStream inputStream = item.getInputStream();
-                    Path destination = Paths.get("MyFile.jpg");
-                    Files.copy(inputStream, destination,
-                                StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-        } catch (FileUploadException | IOException e) {
-            e.printStackTrace();
-        }
-
-
-    }
- */
 	
 	/**
 	 * Configure local Rest server
@@ -383,111 +306,4 @@ curl \
 	    
 	}
 
-
-//    from("direct:uploadFile").        
-//	to("log:block");
-//    from("direct:putFile").to("file://putFile");
-//    from("direct:listDirectory").process(echoP);
-//    from("direct:infoFile").to("file://infoFile");
-//    from("test-jms:test.queue")
-//    .wireTap("direct:uploadFile")
-//    .process(echoP);
-//    
-//	 from("direct:uploadFile").to("file://uploadFile");
-//	 
-//	 
-//	 
-//     .get("/").to("direct:uploadFile")
-//     .get().to("direct:uploadFile")
-//
-//		.produces("application/json")
-//		.bindingMode(RestBindingMode.json)
-//         .post().to("direct:uploadFile")
-//         .put().to("direct:putFile")
-//         .get().to("direct:uploadFile")
-////         .get().to("direct:listDirectory")
-//         .get("/{fileId}").to("direct:getFile")
-//         .delete("/{fileId}").to("direct:deleteFile")
-//         ;
-	
-	
-//Message out = exchange.getOut();
-//int responseCode = out.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//
-//System.err.println("responseCode: " + responseCode);
-//System.err.println("obod: " + out.getBody(String.class));
-//	});
-	
-//	exchange.getOut().copyFrom(exchange.getIn());
-//	authResponse = authenticate();
-//	exchange.getOut().setBody(authResponse);
-//	exchange.getOut().removeHeaders("*");
-//	exchange.getOut().setHeader("Authorization",  authResponse.getAuthorizationToken());
-	
-//	.setHeader("Authorization", constant("Basic ${header.authorizationToken}"))
-//	.to("http4://google.com")
-	;
-	
-//
-////  .process(authNProcessor).process(exchange -> {
-//		curl \
-//	    -H "Authorization: ${ACCOUNT_AUTHORIZATION_TOKEN}" \
-//	    -d "{\"accountId\": \"$ACCOUNT_ID\", \"bucketTypes\": [\"allPrivate\",\"allPublic\"]}" \
-//	    "${API_URL}/b2api/v1/b2_list_buckets"    
-//
-//	{
-//	  "buckets": [
-//	    {
-//	      "accountId": "a374f8e3e263",
-//	      "bucketId": "2ab327a44f788e635ef20613",
-//	      "bucketInfo": {},
-//	      "bucketName": "b2public",
-//	      "bucketType": "allPublic",
-//	      "corsRules": [],
-//	      "lifecycleRules": [],
-//	      "revision": 2
-//	    },
-//	    {
-//	      "accountId": "a374f8e3e263",
-//	      "bucketId": "fa73d7e42f083e836e020613",
-//	      "bucketInfo": {},
-//	      "bucketName": "rdnisn-zcloudfs-public",
-//	      "bucketType": "allPublic",
-//	      "corsRules": [],
-//	      "lifecycleRules": [],
-//	      "revision": 1
-//	    }
-//	  ]
-//	}
-//
-//	});
-	//        .to("bean:bean:ping?method=puff")
-//
-//		.to("bean:pinger?method=authenticate")
-//		.setHeader("Authorization", constant("Basic " + headerForAuthorizeAccount))
-//        .to(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl()))
-//        .process(authNProcessor)
-//        .to("file://authNProcessor")
-	;
-	
-	
-//			Map<String, String> obj = new HashMap<String, String>();
-//			obj.put("ans", "reply");
-//			String jsonInString ="Nope";
-//			try {
-//				jsonInString = objectMapper.writeValueAsString(obj);
-//			} catch (JsonProcessingException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-//			log.info(jsonInString);
-	
-//		 from("direct:uploadFile")
-//		 	.process("b2ResponseProcessor(objectMapper)")
-//		 	.transform(body().regexReplaceAll("\n", "<br/>"))
-//		 	.wireTap("activemq:remoteUploadFile")
-//		 	.to(getB2URL.apply("POST", new HashMap()))
-	
-	// process the response
-//			 .process(echoP);
 }

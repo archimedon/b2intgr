@@ -20,6 +20,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
@@ -153,6 +154,27 @@ public class ZRouteBuilder extends RouteBuilder {
 		.pipeline().to("direct:auth", "direct:listdir");
 	
 	from("direct:uploadFile")
+		.process(exchange -> { 
+			exchange.getOut().setHeader("locprocdata",  upload(exchange.getIn()));
+		})
+		
+//		.wireTap("direct:backproc")
+		.to("direct:uploadreply");
+	
+	from("direct:uploadreply")
+	.wireTap("direct:backproc")
+	.process(exchange -> {
+		exchange.getOut().setBody(
+			objectMapper.writeValueAsString(
+					 exchange.getIn().getHeader("locprocdata", UploadData.class)
+					 .getFiles().entrySet().stream().map(x -> 
+					"name: " + x.getKey() + " size: " + x.getValue().length()
+				).collect(Collectors.toList())
+			)
+		);
+	});
+
+	from("direct:backproc")
 		.pipeline().to("direct:auth", "direct:get_up_url", "direct:upload");
 	
 	
@@ -179,34 +201,34 @@ public class ZRouteBuilder extends RouteBuilder {
 	});
 	
 	from("direct:get_up_url")
-		.inputType(File.class)
-		.process(exchange -> {
-			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
-			exchange.getOut().copyFrom(exchange.getIn());
-			System.err.println("direct:get_up_url authBody " + authBody);
-
-			final Message responseOut = getContext().createProducerTemplate()
-				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
-
-					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
-						put("bucketId", "2ab327a44f788e635ef20613");
-					}}));
-					
-					System.err.println("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
-					System.err.println("Authorization USED: " + authBody.getAuthorizationToken());
-					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
-			}).getOut();
-			
-			try {
-				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
-				authBody.setUploadUrl(authResponse.getUploadUrl());
-				authBody.setBucketId(authResponse.getBucketId());
-				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			
-		});
+	.process(fin -> System.err.println("locprocdata ---> " + fin.getIn().getHeader("locprocdata")));
+//		.process(exchange -> {
+//			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
+//			exchange.getOut().copyFrom(exchange.getIn());
+//			System.err.println("direct:get_up_url authBody " + authBody);
+//
+//			final Message responseOut = getContext().createProducerTemplate()
+//				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
+//
+//					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
+//						put("bucketId", "2ab327a44f788e635ef20613");
+//					}}));
+//					
+//					System.err.println("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
+//					System.err.println("Authorization USED: " + authBody.getAuthorizationToken());
+//					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
+//			}).getOut();
+//			
+//			try {
+//				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
+//				authBody.setUploadUrl(authResponse.getUploadUrl());
+//				authBody.setBucketId(authResponse.getBucketId());
+//				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
+//			} catch (IOException e) {
+//				e.printStackTrace();
+//			}
+//			
+//		});
 
 	Processor p = new Processor() {
 
@@ -264,18 +286,20 @@ curl \
 			final String uploadUrl = getHttp4Proto(authBody.getUploadUrl());
 			System.err.println("uploadUrl " + authBody.getUploadUrl());
 
-			Message messageIn = exchange.getIn();
-		    String contentType = messageIn.getHeader(Exchange.CONTENT_TYPE, String.class);
-		    String name = messageIn.getHeader(Exchange.FILE_NAME, String.class);
-		    File file = messageIn.getBody(java.io.File.class);
-		    
-			 System.err.println("contentType: " + contentType);
-			 System.err.println("name: " + name);
-			 System.err.println("file: " + file.getName());
-
-
 			
-			
+			 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
+			 UploadData data = exchange.getIn().getHeader("locprocdata", UploadData.class);
+			 data.getFiles().entrySet().forEach(ent -> {
+				 entityBuilder.addBinaryBody(ent.getKey(), ent.getValue());
+			 });
+			 data.getMeta().entrySet().forEach(ent -> {
+				 entityBuilder.addTextBody(ent.getKey(), ent.getValue());
+			 });
+			 
+
+//			  // Set multipart entity as the outgoing message’s body…
+//			  exchange.getOut().setBody(entityBuilder.build());
+			  
 			 MultipartEntity entity = new MultipartEntity();
 			 File upfile = new File("ReadMe.txt");
 			 System.err.println("upfile.length() " + upfile.length());
@@ -349,6 +373,67 @@ curl \
         ;
 	
 	}
+
+	class UploadData {
+		final Map<String, File> files;
+		final Map<String, String> meta;
+		
+		public UploadData() {
+			super();
+			this.files = new HashMap<String, File>();
+			this.meta = new HashMap<String, String>();
+		}
+		public Map<String, File> getFiles() {
+			return files;
+		}
+
+		public Map<String, String> getMeta() {
+			return meta;
+		}
+	}
+	
+	public UploadData upload(Message messageIn) throws Exception {
+
+        MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
+        String filePath = messageIn.getHeader("filePath", String.class).replaceAll("-","/");
+        
+        InputRepresentation representation =
+            new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
+
+		UploadData uploadData = null;
+		
+        try {
+            List<FileItem> items = 
+                new RestletFileUpload( new DiskFileItemFactory()).parseRepresentation(representation);
+
+            if (! items.isEmpty()) {
+            	
+            		uploadData = new UploadData();
+            	
+            		for (FileItem item : items) {
+            			if (item.isFormField()) {
+            				uploadData.getMeta().put(item.getFieldName(), item.getString());
+            			}
+            			else {
+//            				tmp = new File(filePath, item.getName());
+//            				tmp.getParentFile().mkdirs();
+            				Path destination = Paths.get(filePath, item.getName());
+            				Files.createDirectories(destination.getParent());
+            				
+//    	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
+    						item.write(destination.toFile());
+//    	                		tmp = destination.toFile();
+            				uploadData.getFiles().put(item.getName(), destination.toFile());
+            				System.err.println("file item: " + item.getName());
+            			}
+            		}
+            }
+        } catch (FileUploadException | IOException e) {
+            e.printStackTrace();
+        }
+        return uploadData;
+
+    }
 	
 	public void uploadData(Message messageIn) {
 	    String contentType = messageIn.getHeader(Exchange.CONTENT_TYPE, String.class);

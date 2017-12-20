@@ -7,6 +7,10 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -28,6 +32,8 @@ import org.apache.camel.http.common.HttpOperationFailedException;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
 import org.apache.commons.fileupload.FileItem;
+import org.apache.commons.fileupload.FileUploadException;
+import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -35,10 +41,12 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.restlet.Request;
 import org.restlet.data.MediaType;
+import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
 
 import com.fasterxml.jackson.core.JsonParseException;
@@ -92,19 +100,28 @@ public class ZRouteBuilder extends RouteBuilder {
         
 		onException(HttpOperationFailedException.class)
         .onWhen(exchange -> {
+        	
+        	if (exchange.isFailed()) {}
+        	exchange.getOut().setHeader("cause", exchange.getException().getMessage());
           HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
           return exe.getStatusCode() > 204;
         })
         .log("HTTP exception handled")
         .handled(true)
         //.continued(true)
-        .setBody(constant("There will be HttpOperationFailedException blood"));
+        .setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
 
-		onException(Exception.class)
+		onException(Exception.class).process(exchange ->  {
+//			exchange.getOut().setHeader("cause", exchange.getException());
+			exchange.getOut().setBody(exchange.getIn().getBody());
+			
+//			HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
+        })
 		.log("Not handled")
 		.handled(true)
 		//.continued(true)
-		.setBody(constant("There will be Exception blood"));
+		;
+//		.setBody(constant("cause: ${header.cause}"));
 		
 
 		Pinger ping = new Pinger(
@@ -191,6 +208,40 @@ public class ZRouteBuilder extends RouteBuilder {
 			
 		});
 
+	Processor p = new Processor() {
+
+	    @Override
+	    public void process(Exchange exchange) throws Exception {
+
+	        MediaType mediaType = exchange.getIn().getHeader(Exchange.CONTENT_TYPE, MediaType.class);
+	        InputRepresentation representation =
+	            new InputRepresentation(exchange.getIn().getBody(InputStream.class), mediaType);
+
+	        try {
+	            List<FileItem> items = 
+	                new RestletFileUpload(
+	                    new DiskFileItemFactory()).parseRepresentation(representation);
+
+	            for (FileItem item : items) {
+	                if (item.isFormField()) {
+	                		System.err.println("item: " + item.getFieldName() + " : " + item.getString());
+	                }
+	                else {
+	                	InputStream inputStream = item.getInputStream();
+	                	Path destination = Paths.get("MyFile.png");
+	                	Files.copy(inputStream, destination,
+	                			StandardCopyOption.REPLACE_EXISTING);
+	                	System.err.println("file item: " + item.getName());
+	                }
+	            }
+	        } catch (FileUploadException | IOException e) {
+	            e.printStackTrace();
+	        }
+
+
+	    }
+
+	};
 /*
 
 curl \
@@ -204,8 +255,8 @@ curl \
 
 */
 	
+//	.process(ex -> toMultipart(ex));
 	from("direct:upload")
-		.inputType(File.class)
 		.process(exchange -> {
 			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
 			exchange.getOut().copyFrom(exchange.getIn());
@@ -220,7 +271,7 @@ curl \
 		    
 			 System.err.println("contentType: " + contentType);
 			 System.err.println("name: " + name);
-			 System.err.println("file: " + file);
+			 System.err.println("file: " + file.getName());
 
 
 			
@@ -306,4 +357,19 @@ curl \
 	    
 	}
 
+	public void toMultipart(Exchange exchange) {
+
+	  // Read the incoming message…
+		File file = exchange.getIn().getBody(File.class);
+		String name = exchange.getIn().getHeader(Exchange.FILE_NAME, String.class);
+
+		 System.err.println("upName: " + name);
+	  // Encode the file as a multipart entity…
+	MultipartEntityBuilder entity = MultipartEntityBuilder.create();
+	  entity.addBinaryBody("file", file);
+	  entity.addTextBody("name", name);
+
+	  // Set multipart entity as the outgoing message’s body…
+	  exchange.getOut().setBody(entity.build());
+	}
 }

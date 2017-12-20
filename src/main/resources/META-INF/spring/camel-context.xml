@@ -3,13 +3,11 @@
 <beans xmlns="http://www.springframework.org/schema/beans"
     xmlns:amq="http://activemq.apache.org/schema/core"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd        http://camel.apache.org/schema/spring http://camel.apache.org/schema/spring/camel-spring.xsd        http://activemq.apache.org/schema/core http://activemq.apache.org/schema/core/activemq-core.xsd">
-
     <broker persistent="false" useJmx="true" xmlns="http://activemq.apache.org/schema/core">
         <transportConnectors>
             <transportConnector uri="tcp://localhost:61616"/>
         </transportConnectors>
     </broker>
-    
     <!-- Lets connect the Camel ActiveMQ component to the embedded broker.
        See http://camel.apache.org/activemq.html for more information.
   -->
@@ -23,12 +21,10 @@
          routing on the messages using XPath. 
   -->
     <bean class="com.fasterxml.jackson.databind.ObjectMapper" id="objectMapper"/>
-    
     <bean class="com.rdnisn.acrhq.ZRouteBuilder" id="restRouteBuilder">
-    		<constructor-arg ref="objectMapper"/>
-    		<constructor-arg value="config.json"/>
+        <constructor-arg ref="objectMapper"/>
+        <constructor-arg value="config.json"/>
     </bean>
-
     <camelContext id="gazelle" xmlns="http://camel.apache.org/schema/spring">
         <routeBuilder id="first" ref="restRouteBuilder"/>
     </camelContext>

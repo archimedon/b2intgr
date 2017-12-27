@@ -60,7 +60,7 @@ import static com.rdnisn.acrhq.RemoteStorageAPI.http4Suffix;
 import static com.rdnisn.acrhq.RemoteStorageAPI.sha1;
 
 /**
- * A Camel Java8 DSL Router
+ * Base Router
  */
 public class ZRouteBuilder extends RouteBuilder {
 	
@@ -73,8 +73,10 @@ public class ZRouteBuilder extends RouteBuilder {
 	public ZRouteBuilder(ObjectMapper objectMapper, String configFile) throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
 		this.objectMapper = objectMapper;
-		this.serviceConfig = 
-				objectMapper.readValue(new FileInputStream(configFile == null ?  "config.json" : configFile), CloudFSConfiguration.class);
+		this.serviceConfig = objectMapper.readValue(
+			new FileInputStream(configFile == null ?  "config.json" : configFile),
+			CloudFSConfiguration.class
+		);
 
 		this.headerForAuthorizeAccount = Base64.getEncoder().encodeToString(
 			(serviceConfig.getRemoteAccountId() + ":" + serviceConfig.getRemoteApplicationKey()).getBytes()
@@ -85,26 +87,17 @@ public class ZRouteBuilder extends RouteBuilder {
 		// allow Jackson json to convert to pojo types also (by default jackson only
 		// converts to String and other simple types)
 		getContext().getProperties().put("CamelJacksonTypeConverterToPojo", "true");
-		
 	}
-	
-    public void processMultiPart(final Exchange exchange) throws Exception {
-        File filePayload = null;
-        Object obj = exchange.getIn().getMandatoryBody();
-    }
-
 
 	/**
 	 * Routes ...
 	 */
 	public void configure() {
         
-		onException(HttpOperationFailedException.class)
-        .onWhen(exchange -> {
-        	
-        	if (exchange.isFailed()) {}
-        	exchange.getOut().setHeader("cause", exchange.getException().getMessage());
-          HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
+		super.onException(HttpOperationFailedException.class).onWhen(exchange -> {
+	        	if (exchange.isFailed()) {}
+	        	exchange.getOut().setHeader("cause", exchange.getException().getMessage());
+	        	HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
           return exe.getStatusCode() > 204;
         })
         .log("HTTP exception handled")
@@ -148,17 +141,20 @@ public class ZRouteBuilder extends RouteBuilder {
 //	from("timer:healthCheck?period=2000")
 //	  .pipeline().to("direct:auth", "direct:listdir"); // .to(ping, new AuthNProcessor(objectMapper))
 		
+		
+	// Replies -> Authentication
 	from("direct:auth").process(ping);
 
-	from("direct:listDirectory")
+	// Replies -> List of buckets
+	from("direct:rest.list_buckets")
 		.pipeline().to("direct:auth", "direct:listdir");
 	
-	from("direct:uploadFile")
+	// Replies -> HREF to resource
+	from("direct:rest.upload")
 		.process(exchange -> { 
 			exchange.getOut().setHeader("locprocdata",  upload(exchange.getIn()));
 		})
-		
-//		.wireTap("direct:backproc")
+		.wireTap("direct:backproc")
 		.to("direct:uploadreply");
 	
 	from("direct:uploadreply")
@@ -168,7 +164,7 @@ public class ZRouteBuilder extends RouteBuilder {
 			objectMapper.writeValueAsString(
 					 exchange.getIn().getHeader("locprocdata", UploadData.class)
 					 .getFiles().entrySet().stream().map(x -> 
-					"name: " + x.getKey() + " size: " + x.getValue().length()
+					"name: " + x.getKey() + " size: " + x.getValue().toFile().length()
 				).collect(Collectors.toList())
 			)
 		);
@@ -197,15 +193,15 @@ public class ZRouteBuilder extends RouteBuilder {
 		int	responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 		
 		exchange.getOut().setBody(responseOut.getBody(String.class));
-		System.err.println("inner responseCode " + responseCode);
+		log.debug("inner responseCode " + responseCode);
 	});
 	
 	from("direct:get_up_url")
-	.process(fin -> System.err.println("locprocdata ---> " + fin.getIn().getHeader("locprocdata")));
+	.process(fin -> log.debug("locprocdata ---> " + fin.getIn().getHeader("locprocdata")));
 //		.process(exchange -> {
 //			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
 //			exchange.getOut().copyFrom(exchange.getIn());
-//			System.err.println("direct:get_up_url authBody " + authBody);
+//			log.debug("direct:get_up_url authBody " + authBody);
 //
 //			final Message responseOut = getContext().createProducerTemplate()
 //				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
@@ -214,8 +210,8 @@ public class ZRouteBuilder extends RouteBuilder {
 //						put("bucketId", "2ab327a44f788e635ef20613");
 //					}}));
 //					
-//					System.err.println("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
-//					System.err.println("Authorization USED: " + authBody.getAuthorizationToken());
+//					log.debug("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
+//					log.debug("Authorization USED: " + authBody.getAuthorizationToken());
 //					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
 //			}).getOut();
 //			
@@ -246,14 +242,14 @@ public class ZRouteBuilder extends RouteBuilder {
 
 	            for (FileItem item : items) {
 	                if (item.isFormField()) {
-	                		System.err.println("item: " + item.getFieldName() + " : " + item.getString());
+	                		log.debug("item: " + item.getFieldName() + " : " + item.getString());
 	                }
 	                else {
 	                	InputStream inputStream = item.getInputStream();
 	                	Path destination = Paths.get("MyFile.png");
 	                	Files.copy(inputStream, destination,
 	                			StandardCopyOption.REPLACE_EXISTING);
-	                	System.err.println("file item: " + item.getName());
+	                	log.debug("file item: " + item.getName());
 	                }
 	            }
 	        } catch (FileUploadException | IOException e) {
@@ -284,13 +280,13 @@ curl \
 			exchange.getOut().copyFrom(exchange.getIn());
 
 			final String uploadUrl = getHttp4Proto(authBody.getUploadUrl());
-			System.err.println("uploadUrl " + authBody.getUploadUrl());
+			log.debug("uploadUrl " + authBody.getUploadUrl());
 
 			
 			 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
 			 UploadData data = exchange.getIn().getHeader("locprocdata", UploadData.class);
 			 data.getFiles().entrySet().forEach(ent -> {
-				 entityBuilder.addBinaryBody(ent.getKey(), ent.getValue());
+				 entityBuilder.addBinaryBody(ent.getKey(), ent.getValue().toFile());
 			 });
 			 data.getMeta().entrySet().forEach(ent -> {
 				 entityBuilder.addTextBody(ent.getKey(), ent.getValue());
@@ -302,8 +298,8 @@ curl \
 			  
 			 MultipartEntity entity = new MultipartEntity();
 			 File upfile = new File("ReadMe.txt");
-			 System.err.println("upfile.length() " + upfile.length());
-			 System.err.println("sha1(upfile) " + sha1(upfile));
+			 log.debug("upfile.length() " + upfile.length());
+			 log.debug("sha1(upfile) " + sha1(upfile));
 			 
 			    entity.addPart("file", new FileBody(upfile));
 
@@ -319,9 +315,9 @@ curl \
 //			    request.setHeader("X-Bz-Info-Author", "unknown");
 			    request.setEntity(entity);
 
-			    System.err.println("request");
+			    log.debug("request");
 			    for (org.apache.http.Header h: request.getAllHeaders()) {
-			    		System.err.println(h.getName() + " : " +  h.getValue());
+			    		log.debug(h.getName() + " : " +  h.getValue());
 			    }
 			    
 			    
@@ -329,13 +325,13 @@ curl \
 			    
 			    HttpClient client = new DefaultHttpClient();
 			    HttpResponse response = client.execute(request);
-			    System.err.println("response:");
+			    log.debug("response:");
 			    for (org.apache.http.Header h: response.getAllHeaders()) {
-		    		System.err.println(h.getName() + " : " +  h.getValue());
+		    		log.debug(h.getName() + " : " +  h.getValue());
 			    }
 
 //			
-			System.err.println("uploadUrl getStatusLine " + response.getStatusLine());
+			log.debug("uploadUrl getStatusLine " + response.getStatusLine());
 			
 			
 			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
@@ -357,33 +353,35 @@ curl \
 	rest(serviceConfig.getContextUri()).produces("application/json")
 	
 		// Upload a File
-        .post("/new/{filePath}").to("direct:uploadFile")
+        .post("/new/{filePath}").to("direct:rest.upload")
 
         // Update a File
 //        .put("/mod/{filePath}").to("direct:putFile")
 
         // List Directory
-        .get("/ls/{dirPath}").to("direct:listDirectory")
+        .get("/ls").to("direct:rest.list_buckets")
+        
+//        .get("/ls/{dirPath}").to("direct:rest.lsdir")
 
         // Get file info
 ////        .get("/file/{filePath}").to("direct:infoFile")
 
         // Delete file
-//        .delete("/rm/{filePath}").to("direct:listDirectory")
+//        .delete("/rm/{filePath}").to("direct:rest.list_buckets")
         ;
 	
 	}
 
 	class UploadData {
-		final Map<String, File> files;
+		final Map<String, Path> files;
 		final Map<String, String> meta;
 		
 		public UploadData() {
 			super();
-			this.files = new HashMap<String, File>();
+			this.files = new HashMap<String, Path>();
 			this.meta = new HashMap<String, String>();
 		}
-		public Map<String, File> getFiles() {
+		public Map<String, Path> getFiles() {
 			return files;
 		}
 
@@ -423,8 +421,8 @@ curl \
 //    	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
     						item.write(destination.toFile());
 //    	                		tmp = destination.toFile();
-            				uploadData.getFiles().put(item.getName(), destination.toFile());
-            				System.err.println("file item: " + item.getName());
+            				uploadData.getFiles().put(item.getName(), destination);
+            				log.debug("file item: " + item.getName());
             			}
             		}
             }
@@ -448,7 +446,7 @@ curl \
 		File file = exchange.getIn().getBody(File.class);
 		String name = exchange.getIn().getHeader(Exchange.FILE_NAME, String.class);
 
-		 System.err.println("upName: " + name);
+		 log.debug("upName: " + name);
 	  // Encode the file as a multipart entity…
 	MultipartEntityBuilder entity = MultipartEntityBuilder.create();
 	  entity.addBinaryBody("file", file);

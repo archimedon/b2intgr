@@ -30,6 +30,8 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.restlet.RestletConstants;
 import org.apache.camel.http.common.HttpOperationFailedException;
+import org.apache.camel.model.OnExceptionDefinition;
+import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
 import org.apache.commons.fileupload.FileItem;
@@ -54,6 +56,8 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rdnisn.acrhq.CloudFSProcessor.UploadData;
+import com.rdnisn.acrhq.CloudFSProcessor.Verb;
 
 import static com.rdnisn.acrhq.RemoteStorageAPI.getHttp4Proto;
 import static com.rdnisn.acrhq.RemoteStorageAPI.http4Suffix;
@@ -69,6 +73,8 @@ public class ZRouteBuilder extends RouteBuilder {
 	final private CloudFSConfiguration serviceConfig;
 	final private ObjectMapper objectMapper;
 	final private String headerForAuthorizeAccount;
+	final private String docRoot = "/Users/ronalddennison/eclipse-workspace/acrhq";
+	final private String domain = "http://test.rdnsn.com";
 	
 	public ZRouteBuilder(ObjectMapper objectMapper, String configFile) throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
@@ -83,101 +89,138 @@ public class ZRouteBuilder extends RouteBuilder {
 		);
 		
 		// enable Jackson json type converter
-		getContext().getProperties().put("CamelJacksonEnableTypeConverter", "true");
+		getContext().getGlobalOptions().put("CamelJacksonEnableTypeConverter", "true");
 		// allow Jackson json to convert to pojo types also (by default jackson only
 		// converts to String and other simple types)
-		getContext().getProperties().put("CamelJacksonTypeConverterToPojo", "true");
+		getContext().getGlobalOptions().put("CamelJacksonTypeConverterToPojo", "true");
 	}
 
+	private OnExceptionDefinition httpExceptionHandler() {
+		return onException(HttpOperationFailedException.class).onWhen(exchange -> {
+			if (exchange.isFailed()) {}
+			exchange.getOut().setHeader("cause", exchange.getException().getMessage());
+			HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
+			return exe.getStatusCode() > 204;
+		})
+				.log("HTTP exception handled")
+				.handled(true)
+//.continued(true)
+				.setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
+	}
+	
+	private OnExceptionDefinition generalExceptionHandler() {
+		
+		return onException(Exception.class).process(exchange ->  {
+	exchange.getOut().setHeader("cause", exchange.getException());
+			exchange.getOut().setBody(exchange.getIn().getBody());
+			log.debug("except: " , exchange.getException());
+//	HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
+		})
+				.log("Not handled")
+				.handled(false)
+//.continued(true)
+				.setBody(constant("cause: ${header.cause}"));
+		
+	}
+	 
+	private String getLocalURL(Map.Entry<Path, String> x) {
+		return x.getKey().toUri().toString().replaceFirst("file://" + docRoot, domain);
+	}
 	/**
 	 * Routes ...
 	 */
 	public void configure() {
         
-		super.onException(HttpOperationFailedException.class).onWhen(exchange -> {
-	        	if (exchange.isFailed()) {}
-	        	exchange.getOut().setHeader("cause", exchange.getException().getMessage());
-	        	HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
-          return exe.getStatusCode() > 204;
-        })
-        .log("HTTP exception handled")
-        .handled(true)
-        //.continued(true)
-        .setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
-
-		onException(Exception.class).process(exchange ->  {
-//			exchange.getOut().setHeader("cause", exchange.getException());
-			exchange.getOut().setBody(exchange.getIn().getBody());
-			
-//			HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
-        })
-		.log("Not handled")
-		.handled(true)
-		//.continued(true)
-		;
-//		.setBody(constant("cause: ${header.cause}"));
+		
+		
+		httpExceptionHandler();
+		generalExceptionHandler();
 		
 
-		Pinger ping = new Pinger(
-				getContext(), objectMapper,
-				http4Suffix(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl())), headerForAuthorizeAccount);
+		/**
+		 * Configure local Rest server
+		 */
+		restConfiguration()
+		.component("restlet")
+		.host(serviceConfig.getHost())
+		.port(serviceConfig.getPort())
+		.bindingMode(RestBindingMode.auto)
+		.componentProperty("chunked", "true");
 
-
-//		<b>b2_get_upload_url</b>
-//		export BUCKET_ID=json.bucketId
-//		export BUCKET_ID="fa73d7e42f083e836e020613"
-//
-//		curl \
-//			-H "Authorization: ${ACCOUNT_AUTHORIZATION_TOKEN}" \
-//			-d "{\"bucketId\": \"${BUCKET_ID}\"}" \
-//			${API_URL}/b2api/v1/b2_get_upload_url
-//		{
-//		  "authorizationToken": "3_20171208215936_9ee5d859568e5cba8a30de02_e007914bf676280d4028d91ced6e22de1ad62ab3_001_upld",
-//		  "bucketId": "fa73d7e42f083e836e020613",
-//		  "uploadUrl": "https://pod-000-1090-17.backblaze.com/b2api/v1/b2_upload_file/fa73d7e42f083e836e020613/c001_v0001090_t0028"
-//		}exchange ->
+		rest(serviceConfig.getContextUri()).produces("application/json")
 		
+			// Upload a File
+	        .post("/new/{filePath}").to("direct:rest.upload").outType(Map.class)
 
-//	from("timer:healthCheck?period=2000")
-//	  .pipeline().to("direct:auth", "direct:listdir"); // .to(ping, new AuthNProcessor(objectMapper))
+	        // Update a File
+//	        .put("/mod/{filePath}").to("direct:putFile")
+
+	        // List Buckets
+	        .get("/ls").to("direct:rest.list_buckets")
+	        
+	        // List Directory
+//	        .get("/ls/{dirPath}").to("direct:rest.lsdir")
+
+	        // Get file info
+////	        .get("/file/{filePath}").to("direct:infoFile")
+
+	        // Delete file
+//	        .delete("/{filePath}").to("direct:rest.rm")
+//	        .delete("/dir/{dirPath}").to("direct:rest.rmdir")
+	        ;
 		
 		
 	// Replies -> Authentication
-	from("direct:auth").process(ping);
+	from("direct:auth").process(new Pinger(
+			getContext(), objectMapper,
+			http4Suffix(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl())), headerForAuthorizeAccount));
 
 	// Replies -> List of buckets
 	from("direct:rest.list_buckets")
 		.pipeline().to("direct:auth", "direct:listdir");
 	
 	// Replies -> HREF to resource
-	from("direct:rest.upload")
-		.process(exchange -> { 
-			exchange.getOut().setHeader("locprocdata",  upload(exchange.getIn()));
-		})
+	from("direct:rest.upload").to("direct:localsave");
+	
+	
+	from("direct:localsave")
+		.to("direct:locprocdata")
 		.wireTap("direct:backproc")
 		.to("direct:uploadreply");
+		
+	
+	
+	from("direct:locprocdata").process(new CloudFSProcessor() {
+		
+	    @Override
+	    public void process(Exchange exchange) throws Exception {
+	    		setReply(exchange, Verb.transientUpload, saveLocally(exchange.getIn()));
+	    }
+	});
 	
 	from("direct:uploadreply")
-	.wireTap("direct:backproc")
-	.process(exchange -> {
-		exchange.getOut().setBody(
-			objectMapper.writeValueAsString(
-					 exchange.getIn().getHeader("locprocdata", UploadData.class)
-					 .getFiles().entrySet().stream().map(x -> 
-					"name: " + x.getKey() + " size: " + x.getValue().toFile().length()
-				).collect(Collectors.toList())
-			)
-		);
-	});
+		.process(exchange -> {
+			exchange.getOut()
+					.setBody(objectMapper
+							.writeValueAsString(exchange.getIn().getBody(UploadData.class).getFiles().entrySet()
+									.stream().collect(Collectors.toMap(this::getLocalURL, f -> f.getValue()))));
+		});
 
 	from("direct:backproc")
-		.pipeline().to("direct:auth", "direct:get_up_url", "direct:upload");
+	.process(exchange -> {
+		exchange.getOut().setBody(objectMapper.writeValueAsString(exchange.getIn().getBody()));
+	}).to("file:upload");
+//	.process(ex -> { UploadData up = ex.getIn().getHeader("locprocdata", UploadData.class); System.out.println(up.getFiles());})
+//	.pipeline().to("direct:auth", "direct:get_up_url", "direct:upload");
 	
 	
 	from("direct:listdir")
-	.process(exchange -> {
+	.process(new CloudFSProcessor() {
 		
-		final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
+	    @Override
+	    public void process(Exchange exchange) throws Exception {
+
+	    	final B2Response authBody = (B2Response) getReply(exchange, Verb.authorizeService);
 		exchange.getOut().copyFrom(exchange.getIn());
 
 		final Message responseOut = getContext().createProducerTemplate()
@@ -194,6 +237,8 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 		exchange.getOut().setBody(responseOut.getBody(String.class));
 		log.debug("inner responseCode " + responseCode);
+	    }
+	    
 	});
 	
 	from("direct:get_up_url")
@@ -279,14 +324,13 @@ curl \
 			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
 			exchange.getOut().copyFrom(exchange.getIn());
 
-			final String uploadUrl = getHttp4Proto(authBody.getUploadUrl());
 			log.debug("uploadUrl " + authBody.getUploadUrl());
 
 			
 			 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
 			 UploadData data = exchange.getIn().getHeader("locprocdata", UploadData.class);
 			 data.getFiles().entrySet().forEach(ent -> {
-				 entityBuilder.addBinaryBody(ent.getKey(), ent.getValue().toFile());
+				 entityBuilder.addBinaryBody(ent.getValue(), ent.getKey().toFile());
 			 });
 			 data.getMeta().entrySet().forEach(ent -> {
 				 entityBuilder.addTextBody(ent.getKey(), ent.getValue());
@@ -338,106 +382,7 @@ curl \
 			response.getEntity().writeTo(buf);
 			exchange.getOut().setBody(buf.toString("UTF-8"));
 		});
-
 	
-	/**
-	 * Configure local Rest server
-	 */
-	restConfiguration()
-	.component("restlet")
-	.host(serviceConfig.getHost())
-	.port(serviceConfig.getPort())
-	.bindingMode(RestBindingMode.auto)
-	.componentProperty("chunked", "true");
-
-	rest(serviceConfig.getContextUri()).produces("application/json")
-	
-		// Upload a File
-        .post("/new/{filePath}").to("direct:rest.upload")
-
-        // Update a File
-//        .put("/mod/{filePath}").to("direct:putFile")
-
-        // List Directory
-        .get("/ls").to("direct:rest.list_buckets")
-        
-//        .get("/ls/{dirPath}").to("direct:rest.lsdir")
-
-        // Get file info
-////        .get("/file/{filePath}").to("direct:infoFile")
-
-        // Delete file
-//        .delete("/rm/{filePath}").to("direct:rest.list_buckets")
-        ;
-	
-	}
-
-	class UploadData {
-		final Map<String, Path> files;
-		final Map<String, String> meta;
-		
-		public UploadData() {
-			super();
-			this.files = new HashMap<String, Path>();
-			this.meta = new HashMap<String, String>();
-		}
-		public Map<String, Path> getFiles() {
-			return files;
-		}
-
-		public Map<String, String> getMeta() {
-			return meta;
-		}
-	}
-	
-	public UploadData upload(Message messageIn) throws Exception {
-
-        MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-        String filePath = messageIn.getHeader("filePath", String.class).replaceAll("-","/");
-        
-        InputRepresentation representation =
-            new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
-
-		UploadData uploadData = null;
-		
-        try {
-            List<FileItem> items = 
-                new RestletFileUpload( new DiskFileItemFactory()).parseRepresentation(representation);
-
-            if (! items.isEmpty()) {
-            	
-            		uploadData = new UploadData();
-            	
-            		for (FileItem item : items) {
-            			if (item.isFormField()) {
-            				uploadData.getMeta().put(item.getFieldName(), item.getString());
-            			}
-            			else {
-//            				tmp = new File(filePath, item.getName());
-//            				tmp.getParentFile().mkdirs();
-            				Path destination = Paths.get(filePath, item.getName());
-            				Files.createDirectories(destination.getParent());
-            				
-//    	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-    						item.write(destination.toFile());
-//    	                		tmp = destination.toFile();
-            				uploadData.getFiles().put(item.getName(), destination);
-            				log.debug("file item: " + item.getName());
-            			}
-            		}
-            }
-        } catch (FileUploadException | IOException e) {
-            e.printStackTrace();
-        }
-        return uploadData;
-
-    }
-	
-	public void uploadData(Message messageIn) {
-	    String contentType = messageIn.getHeader(Exchange.CONTENT_TYPE, String.class);
-	    String name = messageIn.getHeader(Exchange.FILE_NAME, String.class);
-	    File file = messageIn.getBody(java.io.File.class);
-	    
 	}
 
 	public void toMultipart(Exchange exchange) {

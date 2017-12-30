@@ -42,11 +42,10 @@ ACCOUNT_ID=... # Comes from your account page on the Backblaze web site
 		    },
 
 */
-public class Pinger implements Processor {
+public class Pinger extends CloudFSProcessor implements Processor {
 	
     final private static Log log = LogFactory.getLog(Pinger.class);
 	private static final long TTL = 10;
-	public static final String B2AUTHN = "B2AUTHN";
 //	private static final long TTL = 12 * 60 * 58;
 	final private CamelContext context;
 	final private String authenticationUrl;
@@ -68,9 +67,8 @@ public class Pinger implements Processor {
 	public void process(Exchange exchange) {
 		exchange.getOut().copyFrom(exchange.getIn());
 		authResponse = authenticate();
-		exchange.getOut().setHeader(B2AUTHN, authResponse);
-		exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
-		
+		setReply(exchange, Verb.authorizeService, authResponse);
+
 //		System.out.println("Pinger-AuthRep: " + authResponse);
 //		Object obj = exchange.getIn().getBody();
 //		if (obj != null) {

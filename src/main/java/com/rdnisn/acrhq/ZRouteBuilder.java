@@ -59,6 +59,7 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableMap;
 import com.rdnisn.acrhq.CloudFSProcessor.Verb;
 
 import static com.rdnisn.acrhq.RemoteStorageAPI.getHttp4Proto;
@@ -128,6 +129,47 @@ public class ZRouteBuilder extends RouteBuilder {
 			serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
 		);
 	}
+	
+	private UploadData saveLocally(final Exchange exchange){
+		Message messageIn = exchange.getIn();
+		
+        MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
+        String filePath = messageIn.getHeader("filePath", String.class).replaceAll("-","/");
+        
+        log.debug("filepAth: " + filePath);
+        InputRepresentation representation =
+            new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
+
+		UploadData uploadData = null;
+		
+        try {
+            List<FileItem> items = 
+                new RestletFileUpload( new DiskFileItemFactory()).parseRepresentation(representation);
+
+            if (! items.isEmpty()) {
+            	
+            		uploadData = new UploadData();
+            	
+            		for (FileItem item : items) {
+            			if (item.isFormField()) {
+            				uploadData.putFormField(item.getFieldName(), item.getString());
+            			}
+            			else {
+            				Path destination = Paths.get(filePath, item.getName());
+            				Files.createDirectories(destination.getParent());
+    	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
+    	                		UserFile uf = new UserFile(destination, item.getFieldName());
+//    	                		uf.setContentType(item.getContentType());
+            				uploadData.addFile(uf);
+            			}
+            		}
+            }
+        } catch (FileUploadException | IOException e) {
+            e.printStackTrace();
+        }
+        return uploadData;
+
+    }
 
 	/**
 	 * Routes ...
@@ -171,37 +213,24 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 		
 	// Replies -> Authentication
-	from("direct:auth").process(
-		new Pinger(getContext(), objectMapper,
+	from("direct:auth").process(new Pinger(getContext(), objectMapper,
 			http4Suffix(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl())), headerForAuthorizeAccount));
 
 	// Replies -> List of buckets
 	from("direct:rest.list_buckets")
-		.pipeline().to("direct:auth", "direct:listdir");
+		.to("direct:auth", "direct:listdir");
 	
 	// Replies -> HREF to resource
 	from("direct:rest.upload").to("direct:localsave");
 	
-	
 	from("direct:localsave")
-		.to("direct:locprocdata")
-		.wireTap("direct:backproc")
-		.to("direct:uploadreply")
-		;
+		.to("direct:locprocdata").wireTap("direct:backproc")
+		.to("direct:uploadreply");
 		
-	
-	from("direct:locprocdata").process(new CloudFSProcessor() {
-	    @Override
-	    public void process(Exchange exchange) throws Exception {
-	    	UploadData data = saveLocally(exchange.getIn());
-	    	log.debug("data " + data.getFiles());
-
-	    		exchange.getOut().setHeader("locprocdata", data);
-//	    		setReply(exchange, Verb.transientUpload, saveLocally(exchange.getIn()));
-	    }
-	});
-	
 	ZRouteBuilder router = this;
+	from("direct:locprocdata")
+		.process(exchange -> CloudFSProcessor.setReply(exchange, Verb.transientUpload, saveLocally(exchange)));
+	
 	
 	from("direct:uploadreply")
 		.process(new CloudFSProcessor() {
@@ -224,9 +253,9 @@ public class ZRouteBuilder extends RouteBuilder {
 	 }
 	 
 	 from("direct:backproc")
-	 .to("direct:auth")
-	.split(new FileSplitter())
-    .to("direct:get_up_url", "direct:processFileItem")
+		.to("direct:auth")
+		.split(new FileSplitter())
+		.to("direct:get_up_url", "direct:processFileItem")
     .end();
 //	.process(exchange -> {
 //		exchange.getOut().setBody(objectMapper.writeValueAsString(exchange.getIn().getBody()));
@@ -238,17 +267,64 @@ public class ZRouteBuilder extends RouteBuilder {
 	    @Override
 	    public void process(Exchange exchange) throws Exception {
 	    	
-	    		final B2Response authBody = (B2Response) getReply(exchange, Verb.authorizeService);
-	    		UserFile file = exchange.getIn().getBody(UserFile.class);
+//	    		final B2Response authBody = (B2Response) getReply(exchange, Verb.authorizeService);
+	    		UserFile userFile = exchange.getIn().getBody(UserFile.class);
+	    		
+	    		String authToken = (String) CloudFSProcessor.getReply(exchange, Verb.authToken);
+	    		String uploadUrl = (String) CloudFSProcessor.getReply(exchange, Verb.uploadUrl);
+	    		String uploadToken = (String) CloudFSProcessor.getReply(exchange, Verb.uploadToken);
 
-		log.debug("procFile: " + file.getName());
-		log.debug("procFile: " + file.getFilepath().toString());
-		log.debug("authBody: " + authBody);
+	    		log.debug("authToken: " + authToken);
+	    		log.debug("uploadUrl: " + uploadUrl);
+	    		log.debug("uploadToken: " + uploadToken);
+		log.debug("procFile: " + userFile.getName());
+		log.debug("procFile: " + userFile.getFilepath().toString());
+		
+		
+
+		 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
+		 entityBuilder.addBinaryBody(userFile.getName(), userFile.getFilepath().toFile());
+		 
+		 String SHA = sha1(userFile.getFilepath().toFile());
+		    
+		    HttpPost request = new HttpPost(uploadUrl);
+		    request.setHeader("Authorization", uploadToken);
+		    request.setHeader("Content-Type", userFile.getContentType());
+//		    request.setHeader("Content-Length", upfile.length() + "");
+		    request.setHeader("X-Bz-Content-Sha1", "do_not_verify");
+		    request.setHeader("X-Bz-File-Name", userFile.getFilepath().getFileName().toString());
+//		    request.setHeader("X-Bz-Info-Author", "unknown");
+		    request.setEntity(entityBuilder.build());
+
+		    log.debug("request");
+		    for (org.apache.http.Header h: request.getAllHeaders()) {
+		    		log.debug(h.getName() + " : " +  h.getValue());
+		    }
+		    
+		    
+		    		
+		    
+		    HttpClient client = new DefaultHttpClient();
+		    HttpResponse response = client.execute(request);
+		    log.debug("response:");
+		    for (org.apache.http.Header h: response.getAllHeaders()) {
+	    		log.debug(h.getName() + " : " +  h.getValue());
+		    }
+
+//		
+		log.debug("uploadUrl getStatusLine " + response.getStatusLine());
+		
+		
+		java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
+		response.getEntity().writeTo(buf);
+		exchange.getOut().setBody(buf.toString("UTF-8"));
+
 	    }
 	};
 	
 	from("direct:processFileItem")
-	.process(processFileItem);
+	.process(processFileItem)
+	.log("BackBlaze response:\n${body}");
 
 	from("direct:listdir")
 	.process(new CloudFSProcessor() {
@@ -261,11 +337,10 @@ public class ZRouteBuilder extends RouteBuilder {
 
 		final Message responseOut = getContext().createProducerTemplate()
 			.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_list_buckets"), innerExchg -> {
-				innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
-					put("accountId", authBody.getAccountId());
-					put("bucketTypes", new ArrayList<String>() {{add("allPrivate");add("allPublic");}});
-				}}));
-				
+				innerExchg.getIn().setBody(objectMapper.writeValueAsString(ImmutableMap.of(
+					"accountId", authBody.getAccountId()
+					,"bucketTypes", new ArrayList<String>() {{add("allPrivate");add("allPublic");}}
+				)));
 				innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
 		}).getOut();
 		
@@ -280,27 +355,29 @@ public class ZRouteBuilder extends RouteBuilder {
 	from("direct:get_up_url")
 		.process(exchange -> {
 			final B2Response authBody = (B2Response) CloudFSProcessor.getReply(exchange, Verb.authorizeService);
-			
 			exchange.getOut().copyFrom(exchange.getIn());
-			log.debug("direct:get_up_url authBody " + authBody);
+			
+			log.debug("Get upload URL");
 
 			final Message responseOut = getContext().createProducerTemplate()
 				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
-
-					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
-						put("bucketId", "2ab327a44f788e635ef20613");
-					}}));
 					
-					log.debug("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
-					log.debug("Authorization USED: " + authBody.getAuthorizationToken());
-					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
+					log.debug(String.format("Request(%s)", authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"));
+					
+					innerExchg.getIn()
+						.setHeader("Authorization", authBody.getAuthorizationToken());
+					
+					innerExchg.getIn()
+						.setBody(objectMapper.writeValueAsString(ImmutableMap.of("bucketId", "2ab327a44f788e635ef20613")));
 			}).getOut();
 			
 			try {
 				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
+				CloudFSProcessor.setReply(exchange, Verb.uploadUrl, authResponse.getUploadUrl());
+				CloudFSProcessor.setReply(exchange, Verb.uploadToken, authResponse.getAuthorizationToken());
 				authBody.setUploadUrl(authResponse.getUploadUrl());
 				authBody.setBucketId(authResponse.getBucketId());
-				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
+//				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
 			} catch (IOException e) {
 				e.printStackTrace();
 			}

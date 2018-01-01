@@ -35,6 +35,7 @@ public abstract class CloudFSProcessor implements Processor {
 
 	public enum Verb {
 		uploadObject, deleteObject, deleteBucket, createBucket, listBuckets, authorizeService, transientUpload
+		, uploadUrl, uploadToken, authToken
 	}
 	
 	public static void setReply(final Exchange exchange, Verb action, Object val) {
@@ -44,15 +45,26 @@ public abstract class CloudFSProcessor implements Processor {
 //				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
 				exchange.setProperty(B2AUTHN, val);
 				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
+				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
 				break;
 			}
+			case authToken : {
+				exchange.getOut().setHeader("authToken",  val);
+		    		break;
+		    	}
 			case listBuckets : break;
 			case transientUpload : {
-		    	log.debug("val " + val);
-
 				exchange.getOut().setHeader("locprocdata",  val);
 		    		break;
 		    	}
+			case uploadUrl : {
+				exchange.getOut().setHeader("uploadUrl", val);
+				break;
+			}
+			case uploadToken : {
+				exchange.getOut().setHeader("uploadToken", val);
+				break;
+			}
 			case createBucket : break;
 			case uploadObject : break;
 		case deleteBucket:
@@ -73,16 +85,26 @@ public abstract class CloudFSProcessor implements Processor {
 				ans = exchange.getProperty(B2AUTHN);
 				break;
 			}
+			case authToken : {
+				ans = exchange.getIn().getHeader("authToken");
+		    		break;
+		    	}
 			case listBuckets : {
-				ans = exchange.getOut().getHeader(B2AUTHN);
+				ans = exchange.getIn().getHeader(B2AUTHN);
 				break;
 			}
 			case createBucket :{
-				ans = exchange.getOut().getHeader(B2AUTHN);
+				break;
+			}
+			case uploadUrl : {
+				ans = exchange.getIn().getHeader("uploadUrl");
+				break;
+			}
+			case uploadToken : {
+				ans = exchange.getIn().getHeader("uploadToken");
 				break;
 			}
 			case uploadObject : {
-				ans = exchange.getOut().getHeader(B2AUTHN);
 				break;
 			}
 			case deleteBucket:
@@ -99,44 +121,5 @@ public abstract class CloudFSProcessor implements Processor {
 		}
 		return ans;
 	}
-	
-	public UploadData saveLocally(Message messageIn){
-
-        MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-        String filePath = messageIn.getHeader("filePath", String.class).replaceAll("-","/");
-        
-        log.debug("filepAth: " + filePath);
-        InputRepresentation representation =
-            new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
-
-		UploadData uploadData = null;
-		
-        try {
-            List<FileItem> items = 
-                new RestletFileUpload( new DiskFileItemFactory()).parseRepresentation(representation);
-
-            if (! items.isEmpty()) {
-            	
-            		uploadData = new UploadData();
-            	
-            		for (FileItem item : items) {
-            			if (item.isFormField()) {
-            				uploadData.putFormField(item.getFieldName(), item.getString());
-            			}
-            			else {
-            				Path destination = Paths.get(filePath, item.getName());
-            				Files.createDirectories(destination.getParent());
-    	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-    	                		UserFile uf = new UserFile(destination, item.getFieldName());
-            				uploadData.addFile(uf);
-            			}
-            		}
-            }
-        } catch (FileUploadException | IOException e) {
-            e.printStackTrace();
-        }
-        return uploadData;
-
-    }
 	
 }

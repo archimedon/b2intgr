@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rdnisn.acrhq.CloudFSProcessor.Verb;
 
 /*
 ACCOUNT_ID=... # Comes from your account page on the Backblaze web site
@@ -68,8 +69,9 @@ public class Pinger extends CloudFSProcessor implements Processor {
 	@Override
 	public void process(Exchange exchange) {
 		exchange.getOut().copyFrom(exchange.getIn());
-		setReply(exchange, Verb.authorizeService, authenticate());
-
+		B2Response auth = (B2Response) authenticate();
+		setReply(exchange, Verb.authorizeService, auth);
+		setReply(exchange, Verb.authToken, auth.getAuthorizationToken());
 //		log.debug("Pinger-AuthRep: " + authResponse);
 //		Object obj = exchange.getIn().getBody();
 //		if (obj != null) {

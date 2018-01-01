@@ -79,10 +79,15 @@ class UserFile implements Comparable<UserFile> {
 	
 	@JsonProperty
 	private final Path filepath;
+	
 	@JsonProperty
 	private final String name;
+	
 	@JsonProperty
 	private final Map<String, String> meta;
+	
+	@JsonProperty
+	private String contentType;
 	
 	public UserFile(Path filepath) {
 		this(filepath, "", (new ImmutableMap.Builder<String, String>()).build());
@@ -115,6 +120,14 @@ class UserFile implements Comparable<UserFile> {
 	public int compareTo(UserFile other) {
 		return this.filepath.compareTo(other.getFilepath());
 	}
-	
+
+	public String getContentType() {
+		return contentType;
+	}
+
+	public void setContentType(String contentType) {
+		this.contentType = contentType;
+	}
+
 }
 

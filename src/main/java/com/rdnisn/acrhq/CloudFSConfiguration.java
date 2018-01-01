@@ -29,6 +29,31 @@ public class CloudFSConfiguration {
 	@JsonProperty
 	private String contextUri = "cloudfs/api";
 	
+	@NotNull
+	@JsonProperty
+	private String docRoot = "/Users/ronalddennison/eclipse-workspace/acrhq";
+	
+	@NotNull
+	@JsonProperty
+	private String protocol = "http";
+	
+	
+	public String getProtocol() {
+		return protocol;
+	}
+
+	public void setProtocol(String protocol) {
+		this.protocol = protocol;
+	}
+
+	public String getDocRoot() {
+		return docRoot;
+	}
+
+	public void setDocRoot(String docRoot) {
+		this.docRoot = docRoot;
+	}
+
 	public String getHost() {
 		return host;
 	}

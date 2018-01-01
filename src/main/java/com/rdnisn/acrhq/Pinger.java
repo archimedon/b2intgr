@@ -17,6 +17,8 @@ import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -44,7 +46,7 @@ ACCOUNT_ID=... # Comes from your account page on the Backblaze web site
 */
 public class Pinger extends CloudFSProcessor implements Processor {
 	
-    final private static Log log = LogFactory.getLog(Pinger.class);
+    protected Logger log = LoggerFactory.getLogger(getClass());
 	private static final long TTL = 10;
 //	private static final long TTL = 12 * 60 * 58;
 	final private CamelContext context;
@@ -66,14 +68,13 @@ public class Pinger extends CloudFSProcessor implements Processor {
 	@Override
 	public void process(Exchange exchange) {
 		exchange.getOut().copyFrom(exchange.getIn());
-		authResponse = authenticate();
-		setReply(exchange, Verb.authorizeService, authResponse);
+		setReply(exchange, Verb.authorizeService, authenticate());
 
-//		System.out.println("Pinger-AuthRep: " + authResponse);
+//		log.debug("Pinger-AuthRep: " + authResponse);
 //		Object obj = exchange.getIn().getBody();
 //		if (obj != null) {
 //			exchange.getOut().setBody(obj);
-//			System.out.println("Pinger-HASBODY: Ywah");
+//			log.debug("Pinger-HASBODY: Ywah");
 //		}
 //		exchange.getOut().setHeader("apiUrl", authResponse.getApiUrl());
 //		exchange.getOut().setHeader("downloadUrl", authResponse.getDownloadUrl());
@@ -101,41 +102,42 @@ public class Pinger extends CloudFSProcessor implements Processor {
 	}
 	
 	public B2Response authenticate(boolean force) {
-		log.info("authenticating...");
-		System.err.println("Check auth stat");
+		log.info("Check Authentication status.??");
 
 		if (force || lastmod <= 0 || noHaveToken() ) {
-			System.err.println("authenticating...\n@: " + authenticationUrl);
+			log.info("Authentication required!");
 
 			final ProducerTemplate b2producerTemplate = context.createProducerTemplate();
 			
 			final Message responseOut = b2producerTemplate.send(authenticationUrl, new Processor() {
 				public void process(Exchange exchange) throws Exception {
-					System.err.println("process...");
+					log.debug(String.format("Authentication request sentTo(authenticationUrl=%s)", authenticationUrl));
 					exchange.getIn().removeHeaders("*");
 					exchange.getIn().setHeader("Authorization", "Basic " + token);
 				}
 			}).getOut();
 
-			String	responseBody = responseOut.getBody(String.class);
 			int		responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 		
-			System.err.println("responseCode " + responseCode);
+			log.debug("responseCode " + responseCode);
 
 			try {
-				authResponse = objectMapper.readValue(responseBody, B2Response.class);
+				authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
+				log.debug("Received auth token: " + authResponse.getAuthorizationToken());
 //				lastmod = hasToken() ? new Date().getTime() : -1;
 				lastmod = authResponse.getStatus() == null && authResponse.getAuthorizationToken() != null ? utcInSecs() : -1;
-				System.err.println("lastmod " + lastmod);
+				log.debug("lastmod " + lastmod);
 				b2producerTemplate.stop();
 			} catch (IOException e) {
 				e.printStackTrace();
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			
-			System.err.println("authResponse token " + authResponse.getAuthorizationToken());
 		}
+		else {
+			log.info("Not renewing Authentication");
+		}
+		
 		return authResponse;
 	}
 

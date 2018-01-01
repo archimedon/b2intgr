@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.camel.Exchange;
+import org.apache.camel.Expression;
 import org.apache.camel.Message;
 import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
@@ -51,12 +52,13 @@ import org.restlet.Request;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rdnisn.acrhq.CloudFSProcessor.UploadData;
 import com.rdnisn.acrhq.CloudFSProcessor.Verb;
 
 import static com.rdnisn.acrhq.RemoteStorageAPI.getHttp4Proto;
@@ -68,14 +70,12 @@ import static com.rdnisn.acrhq.RemoteStorageAPI.sha1;
  */
 public class ZRouteBuilder extends RouteBuilder {
 	
-    final private static Log log = LogFactory.getLog(ZRouteBuilder.class);
+    protected Logger log = LoggerFactory.getLogger(getClass());
 
 	final private CloudFSConfiguration serviceConfig;
 	final private ObjectMapper objectMapper;
 	final private String headerForAuthorizeAccount;
-	final private String docRoot = "/Users/ronalddennison/eclipse-workspace/acrhq";
-	final private String domain = "http://test.rdnsn.com";
-	
+
 	public ZRouteBuilder(ObjectMapper objectMapper, String configFile) throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
 		this.objectMapper = objectMapper;
@@ -83,15 +83,14 @@ public class ZRouteBuilder extends RouteBuilder {
 			new FileInputStream(configFile == null ?  "config.json" : configFile),
 			CloudFSConfiguration.class
 		);
-
+		
 		this.headerForAuthorizeAccount = Base64.getEncoder().encodeToString(
 			(serviceConfig.getRemoteAccountId() + ":" + serviceConfig.getRemoteApplicationKey()).getBytes()
 		);
 		
 		// enable Jackson json type converter
 		getContext().getGlobalOptions().put("CamelJacksonEnableTypeConverter", "true");
-		// allow Jackson json to convert to pojo types also (by default jackson only
-		// converts to String and other simple types)
+		// allow Jackson json to convert to pojo types also
 		getContext().getGlobalOptions().put("CamelJacksonTypeConverterToPojo", "true");
 	}
 
@@ -107,7 +106,7 @@ public class ZRouteBuilder extends RouteBuilder {
 //.continued(true)
 				.setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
 	}
-	
+
 	private OnExceptionDefinition generalExceptionHandler() {
 		
 		return onException(Exception.class).process(exchange ->  {
@@ -122,21 +121,22 @@ public class ZRouteBuilder extends RouteBuilder {
 				.setBody(constant("cause: ${header.cause}"));
 		
 	}
-	 
-	private String getLocalURL(Map.Entry<Path, String> x) {
-		return x.getKey().toUri().toString().replaceFirst("file://" + docRoot, domain);
+
+	private String getLocalURL(UserFile x) {
+		return x.getFilepath().toUri().toString().replaceFirst(
+			"file://"+ serviceConfig.getDocRoot(),
+			serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+		);
 	}
+
 	/**
 	 * Routes ...
 	 */
 	public void configure() {
-        
-		
-		
+
 		httpExceptionHandler();
 		generalExceptionHandler();
 		
-
 		/**
 		 * Configure local Rest server
 		 */
@@ -171,8 +171,8 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 		
 	// Replies -> Authentication
-	from("direct:auth").process(new Pinger(
-			getContext(), objectMapper,
+	from("direct:auth").process(
+		new Pinger(getContext(), objectMapper,
 			http4Suffix(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl())), headerForAuthorizeAccount));
 
 	// Replies -> List of buckets
@@ -186,34 +186,70 @@ public class ZRouteBuilder extends RouteBuilder {
 	from("direct:localsave")
 		.to("direct:locprocdata")
 		.wireTap("direct:backproc")
-		.to("direct:uploadreply");
+		.to("direct:uploadreply")
+		;
 		
-	
 	
 	from("direct:locprocdata").process(new CloudFSProcessor() {
-		
 	    @Override
 	    public void process(Exchange exchange) throws Exception {
-	    		setReply(exchange, Verb.transientUpload, saveLocally(exchange.getIn()));
+	    	UploadData data = saveLocally(exchange.getIn());
+	    	log.debug("data " + data.getFiles());
+
+	    		exchange.getOut().setHeader("locprocdata", data);
+//	    		setReply(exchange, Verb.transientUpload, saveLocally(exchange.getIn()));
 	    }
 	});
 	
+	ZRouteBuilder router = this;
+	
 	from("direct:uploadreply")
-		.process(exchange -> {
-			exchange.getOut()
-					.setBody(objectMapper
-							.writeValueAsString(exchange.getIn().getBody(UploadData.class).getFiles().entrySet()
-									.stream().collect(Collectors.toMap(this::getLocalURL, f -> f.getValue()))));
+		.process(new CloudFSProcessor() {
+		    @Override
+		    public void process(Exchange exchange) throws JsonProcessingException {
+		    		UploadData obj = (UploadData) getReply(exchange, Verb.transientUpload);
+				exchange.getOut().setBody(objectMapper.writeValueAsString(obj.getFiles().stream().collect(Collectors.toMap(router::getLocalURL, uf -> uf.getName() ))));
+		    }
 		});
 
-	from("direct:backproc")
-	.process(exchange -> {
-		exchange.getOut().setBody(objectMapper.writeValueAsString(exchange.getIn().getBody()));
-	}).to("file:upload");
-//	.process(ex -> { UploadData up = ex.getIn().getHeader("locprocdata", UploadData.class); System.out.println(up.getFiles());})
+	
+	 class FileSplitter implements Expression {
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T evaluate(Exchange exchange, Class<T> type) {
+        		exchange.getOut().copyFrom(exchange.getIn());
+            final UploadData body = exchange.getIn().getHeader("locprocdata", UploadData.class);
+            return (T) body.getFiles();
+        }
+	 }
+	 
+	 from("direct:backproc")
+	 .to("direct:auth")
+	.split(new FileSplitter())
+    .to("direct:get_up_url", "direct:processFileItem")
+    .end();
+//	.process(exchange -> {
+//		exchange.getOut().setBody(objectMapper.writeValueAsString(exchange.getIn().getBody()));
+//	}).to("file:upload");
+//	.process(ex -> { UploadData up = ex.getIn().getHeader("locprocdata", UploadData.class); log.debug(up.getFiles());})
 //	.pipeline().to("direct:auth", "direct:get_up_url", "direct:upload");
 	
+	Processor processFileItem = new CloudFSProcessor() {
+	    @Override
+	    public void process(Exchange exchange) throws Exception {
+	    	
+	    		final B2Response authBody = (B2Response) getReply(exchange, Verb.authorizeService);
+	    		UserFile file = exchange.getIn().getBody(UserFile.class);
+
+		log.debug("procFile: " + file.getName());
+		log.debug("procFile: " + file.getFilepath().toString());
+		log.debug("authBody: " + authBody);
+	    }
+	};
 	
+	from("direct:processFileItem")
+	.process(processFileItem);
+
 	from("direct:listdir")
 	.process(new CloudFSProcessor() {
 		
@@ -242,34 +278,34 @@ public class ZRouteBuilder extends RouteBuilder {
 	});
 	
 	from("direct:get_up_url")
-	.process(fin -> log.debug("locprocdata ---> " + fin.getIn().getHeader("locprocdata")));
-//		.process(exchange -> {
-//			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
-//			exchange.getOut().copyFrom(exchange.getIn());
-//			log.debug("direct:get_up_url authBody " + authBody);
-//
-//			final Message responseOut = getContext().createProducerTemplate()
-//				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
-//
-//					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
-//						put("bucketId", "2ab327a44f788e635ef20613");
-//					}}));
-//					
-//					log.debug("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
-//					log.debug("Authorization USED: " + authBody.getAuthorizationToken());
-//					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
-//			}).getOut();
-//			
-//			try {
-//				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
-//				authBody.setUploadUrl(authResponse.getUploadUrl());
-//				authBody.setBucketId(authResponse.getBucketId());
-//				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
-//			} catch (IOException e) {
-//				e.printStackTrace();
-//			}
-//			
-//		});
+		.process(exchange -> {
+			final B2Response authBody = (B2Response) CloudFSProcessor.getReply(exchange, Verb.authorizeService);
+			
+			exchange.getOut().copyFrom(exchange.getIn());
+			log.debug("direct:get_up_url authBody " + authBody);
+
+			final Message responseOut = getContext().createProducerTemplate()
+				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
+
+					innerExchg.getIn().setBody(objectMapper.writeValueAsString(new HashMap<String, Object>() {{
+						put("bucketId", "2ab327a44f788e635ef20613");
+					}}));
+					
+					log.debug("Authorization HDR: " + exchange.getIn().getHeader("Authorization"));
+					log.debug("Authorization USED: " + authBody.getAuthorizationToken());
+					innerExchg.getIn().setHeader("Authorization", authBody.getAuthorizationToken());
+			}).getOut();
+			
+			try {
+				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
+				authBody.setUploadUrl(authResponse.getUploadUrl());
+				authBody.setBucketId(authResponse.getBucketId());
+				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			
+		});
 
 	Processor p = new Processor() {
 
@@ -319,72 +355,68 @@ curl \
 */
 	
 //	.process(ex -> toMultipart(ex));
-	from("direct:upload")
-		.process(exchange -> {
-			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
-			exchange.getOut().copyFrom(exchange.getIn());
-
-			log.debug("uploadUrl " + authBody.getUploadUrl());
-
-			
-			 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
-			 UploadData data = exchange.getIn().getHeader("locprocdata", UploadData.class);
-			 data.getFiles().entrySet().forEach(ent -> {
-				 entityBuilder.addBinaryBody(ent.getValue(), ent.getKey().toFile());
-			 });
-			 data.getMeta().entrySet().forEach(ent -> {
-				 entityBuilder.addTextBody(ent.getKey(), ent.getValue());
-			 });
-			 
-
-//			  // Set multipart entity as the outgoing message’s body…
-//			  exchange.getOut().setBody(entityBuilder.build());
-			  
-			 MultipartEntity entity = new MultipartEntity();
-			 File upfile = new File("ReadMe.txt");
-			 log.debug("upfile.length() " + upfile.length());
-			 log.debug("sha1(upfile) " + sha1(upfile));
-			 
-			    entity.addPart("file", new FileBody(upfile));
-
-			    String SHA = sha1(upfile);
-			    
-			    HttpPost request = new HttpPost(authBody.getUploadUrl());
-			    request.setHeader("Authorization", authBody.getAuthorizationToken());
-			    request.setHeader("Content-Type", "b2/x-auto");
-//			    request.setHeader("Content-Length", upfile.length() + "");
-			    request.setHeader("X-Bz-Content-Sha1", "do_not_verify");
-			    request.setHeader("X-Bz-File-Name", "dennison-test.ReadMe.txt");
-//			    request.setHeader("Content-Type", "text/plain");
-//			    request.setHeader("X-Bz-Info-Author", "unknown");
-			    request.setEntity(entity);
-
-			    log.debug("request");
-			    for (org.apache.http.Header h: request.getAllHeaders()) {
-			    		log.debug(h.getName() + " : " +  h.getValue());
-			    }
-			    
-			    
-			    		
-			    
-			    HttpClient client = new DefaultHttpClient();
-			    HttpResponse response = client.execute(request);
-			    log.debug("response:");
-			    for (org.apache.http.Header h: response.getAllHeaders()) {
-		    		log.debug(h.getName() + " : " +  h.getValue());
-			    }
-
+//	from("direct:upload")
+//		.process(exchange -> {
+//			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
+//			exchange.getOut().copyFrom(exchange.getIn());
+//
+//			log.debug("uploadUrl " + authBody.getUploadUrl());
+//
 //			
-			log.debug("uploadUrl getStatusLine " + response.getStatusLine());
-			
-			
-			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
-			response.getEntity().writeTo(buf);
-			exchange.getOut().setBody(buf.toString("UTF-8"));
-		});
-	
+//			 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
+//			 UploadData data = exchange.getIn().getHeader("locprocdata", UploadData.class);
+//			 data.getFiles().entrySet().forEach(ent -> {
+//				 entityBuilder.addBinaryBody(ent.getValue(), ent.getKey().toFile());
+//			 });
+//			 data.getMeta().entrySet().forEach(ent -> {
+//				 entityBuilder.addTextBody(ent.getKey(), ent.getValue());
+//			 });
+//			 
+//
+//			 MultipartEntity entity = new MultipartEntity();
+//			 File upfile = new File("ReadMe.txt");
+//			 log.debug("upfile.length() " + upfile.length());
+//			 log.debug("sha1(upfile) " + sha1(upfile));
+//			 
+//			    entity.addPart("file", new FileBody(upfile));
+//
+//			    String SHA = sha1(upfile);
+//			    
+//			    HttpPost request = new HttpPost(authBody.getUploadUrl());
+//			    request.setHeader("Authorization", authBody.getAuthorizationToken());
+//			    request.setHeader("Content-Type", "b2/x-auto");
+////			    request.setHeader("Content-Length", upfile.length() + "");
+//			    request.setHeader("X-Bz-Content-Sha1", "do_not_verify");
+//			    request.setHeader("X-Bz-File-Name", "dennison-test.ReadMe.txt");
+////			    request.setHeader("Content-Type", "text/plain");
+////			    request.setHeader("X-Bz-Info-Author", "unknown");
+//			    request.setEntity(entity);
+//
+//			    log.debug("request");
+//			    for (org.apache.http.Header h: request.getAllHeaders()) {
+//			    		log.debug(h.getName() + " : " +  h.getValue());
+//			    }
+//			    
+//			    
+//			    		
+//			    
+//			    HttpClient client = new DefaultHttpClient();
+//			    HttpResponse response = client.execute(request);
+//			    log.debug("response:");
+//			    for (org.apache.http.Header h: response.getAllHeaders()) {
+//		    		log.debug(h.getName() + " : " +  h.getValue());
+//			    }
+//
+//			log.debug("uploadUrl getStatusLine " + response.getStatusLine());
+//			
+//			
+//			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
+//			response.getEntity().writeTo(buf);
+//			exchange.getOut().setBody(buf.toString("UTF-8"));
+//	
+//	});
+//	
 	}
-
 	public void toMultipart(Exchange exchange) {
 
 	  // Read the incoming message…

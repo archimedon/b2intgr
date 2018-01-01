@@ -19,6 +19,8 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -26,6 +28,8 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.ImmutableMap;
 
 public abstract class CloudFSProcessor implements Processor {
+	
+    protected static Logger log = LoggerFactory.getLogger(CloudFSProcessor.class);
 
 	public static final String B2AUTHN = "B2AUTHN";
 
@@ -33,16 +37,20 @@ public abstract class CloudFSProcessor implements Processor {
 		uploadObject, deleteObject, deleteBucket, createBucket, listBuckets, authorizeService, transientUpload
 	}
 	
-	protected void setReply(final Exchange exchange, Verb action, Object val) {
+	public static void setReply(final Exchange exchange, Verb action, Object val) {
 		switch (action) {
 			case authorizeService : {
-				exchange.getOut().setHeader(B2AUTHN, val);
+//				exchange.getOut().setHeader(B2AUTHN, val);
+//				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
+				exchange.setProperty(B2AUTHN, val);
 				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
 				break;
 			}
 			case listBuckets : break;
 			case transientUpload : {
-		    		exchange.getOut().setBody(val);
+		    	log.debug("val " + val);
+
+				exchange.getOut().setHeader("locprocdata",  val);
 		    		break;
 		    	}
 			case createBucket : break;
@@ -56,12 +64,13 @@ public abstract class CloudFSProcessor implements Processor {
 		}
 	}
 
-	protected Object getReply(Exchange exchange, Verb action) {
+	public static Object getReply(Exchange exchange, Verb action) {
 		Object ans = null;
 		
 		switch (action) {
 			case authorizeService : {
-				ans = exchange.getOut().getHeader(B2AUTHN);
+//				ans = exchange.getIn().getHeader(B2AUTHN);
+				ans = exchange.getProperty(B2AUTHN);
 				break;
 			}
 			case listBuckets : {
@@ -81,7 +90,7 @@ public abstract class CloudFSProcessor implements Processor {
 			case deleteObject:
 				break;
 			case transientUpload: {
-				ans = exchange.getOut().getBody();
+				ans = exchange.getIn().getHeader("locprocdata");
 				break;
 			}
 
@@ -96,6 +105,7 @@ public abstract class CloudFSProcessor implements Processor {
         MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
         String filePath = messageIn.getHeader("filePath", String.class).replaceAll("-","/");
         
+        log.debug("filepAth: " + filePath);
         InputRepresentation representation =
             new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
 
@@ -111,21 +121,14 @@ public abstract class CloudFSProcessor implements Processor {
             	
             		for (FileItem item : items) {
             			if (item.isFormField()) {
-            				uploadData.getMeta().put(item.getFieldName(), item.getString());
+            				uploadData.putFormField(item.getFieldName(), item.getString());
             			}
             			else {
             				Path destination = Paths.get(filePath, item.getName());
             				Files.createDirectories(destination.getParent());
     	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-//    						try {
-//								item.write(destination.toFile());
-//							} catch (Exception e) {
-//								// TODO Auto-generated catch block
-//								e.printStackTrace();
-//							}
-//    	                		tmp = destination.toFile();
-            				uploadData.getFiles().put(destination, item.getFieldName());
-//            				log.debug("file item: " + item.getName());
+    	                		UserFile uf = new UserFile(destination, item.getFieldName());
+            				uploadData.addFile(uf);
             			}
             		}
             }
@@ -136,31 +139,4 @@ public abstract class CloudFSProcessor implements Processor {
 
     }
 	
-
-@SuppressWarnings("deprecation")
-@JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
-@JsonIgnoreProperties(ignoreUnknown = true)
-	protected class UploadData {
-
-	@JsonProperty
-	final Map<Path, String> files;
-	
-	@JsonProperty
-	final Map<String, String> meta;
-		
-		public UploadData() {
-			super();
-			this.files = new HashMap<Path, String>();
-			this.meta = new HashMap<String, String>();
-		}
-		
-		public Map<Path, String> getFiles() {
-			return files;
-		}
-
-		public Map<String, String> getMeta() {
-			return meta;
-		}
-	}
-
 }

@@ -36,7 +36,9 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
@@ -272,6 +274,7 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 		
 
+
 		 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
 		 entityBuilder.addBinaryBody(userFile.getName(), userFile.getFilepath().toFile());
 		 
@@ -286,27 +289,17 @@ public class ZRouteBuilder extends RouteBuilder {
 //		    request.setHeader("X-Bz-Info-Author", "unknown");
 		    request.setEntity(entityBuilder.build());
 
-		    log.debug("request");
-		    for (org.apache.http.Header h: request.getAllHeaders()) {
-		    		log.debug(h.getName() + " : " +  h.getValue());
-		    }
-		    
-		    
-		    		
-		    
-		    HttpClient client = new DefaultHttpClient();
-		    HttpResponse response = client.execute(request);
-		    log.debug("response:");
-		    for (org.apache.http.Header h: response.getAllHeaders()) {
-	    		log.debug(h.getName() + " : " +  h.getValue());
-		    }
 
-		log.debug("uploadUrl getStatusLine " + response.getStatusLine());
+		try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
+
+			HttpResponse response = httpclient.execute(request);
+
+			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
+			response.getEntity().writeTo(buf);
+			exchange.getOut().setBody(buf.toString("UTF-8"));
+		}
+
 		
-		
-		java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
-		response.getEntity().writeTo(buf);
-		exchange.getOut().setBody(buf.toString("UTF-8"));
 
 	    }
 	};

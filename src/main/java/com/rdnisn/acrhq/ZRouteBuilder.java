@@ -1,54 +1,42 @@
 package com.rdnisn.acrhq;
 
+import static com.rdnisn.acrhq.RemoteStorageAPI.getHttp4Proto;
+import static com.rdnisn.acrhq.RemoteStorageAPI.http4Suffix;
+import static com.rdnisn.acrhq.RemoteStorageAPI.sha1;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Message;
-import org.apache.camel.Predicate;
 import org.apache.camel.Processor;
-import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.restlet.RestletConstants;
 import org.apache.camel.http.common.HttpOperationFailedException;
 import org.apache.camel.model.OnExceptionDefinition;
-import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.model.rest.RestBindingMode;
-import org.apache.camel.model.rest.RestDefinition;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.restlet.Request;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
@@ -62,20 +50,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.rdnisn.acrhq.CloudFSProcessor.Verb;
 
-import static com.rdnisn.acrhq.RemoteStorageAPI.getHttp4Proto;
-import static com.rdnisn.acrhq.RemoteStorageAPI.http4Suffix;
-import static com.rdnisn.acrhq.RemoteStorageAPI.sha1;
-
 /**
  * Base Router
  */
 public class ZRouteBuilder extends RouteBuilder {
 	
-    protected Logger log = LoggerFactory.getLogger(getClass());
+	private static final String DIRECTORY_SEP = "\\^";
 
-	final private CloudFSConfiguration serviceConfig;
-	final private ObjectMapper objectMapper;
-	final private String headerForAuthorizeAccount;
+	private Logger log = LoggerFactory.getLogger(getClass());
+
+	private final CloudFSConfiguration serviceConfig;
+	private final ObjectMapper objectMapper;
+	private final String headerForAuthorizeAccount;
 
 	public ZRouteBuilder(ObjectMapper objectMapper, String configFile) throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
@@ -102,25 +88,21 @@ public class ZRouteBuilder extends RouteBuilder {
 			HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
 			return exe.getStatusCode() > 204;
 		})
-				.log("HTTP exception handled")
-				.handled(true)
-//.continued(true)
-				.setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
+		.log("HTTP exception handled")
+		.handled(true)
+//		.continued(true)
+		.setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
 	}
 
 	private OnExceptionDefinition generalExceptionHandler() {
-		
 		return onException(Exception.class).process(exchange ->  {
-	exchange.getOut().setHeader("cause", exchange.getException());
+			exchange.getOut().setHeader("cause", exchange.getException());
 			exchange.getOut().setBody(exchange.getIn().getBody());
-			log.debug("except: " , exchange.getException());
-//	HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
+			log.debug("except: " , exchange.getException()); //	HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
 		})
-				.log("Not handled")
-				.handled(false)
-//.continued(true)
-				.setBody(constant("cause: ${header.cause}"));
-		
+		.log("Not handled")
+		.handled(false) //	.continued(true)
+		.setBody(constant("cause: ${header.cause}"));
 	}
 
 	private String getLocalURL(UserFile x) {
@@ -130,13 +112,15 @@ public class ZRouteBuilder extends RouteBuilder {
 		);
 	}
 	
-	private UploadData saveLocally(final Exchange exchange){
+	private UploadData saveLocally(final Exchange exchange) throws UnsupportedEncodingException{
 		Message messageIn = exchange.getIn();
 		
         MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-        String filePath = messageIn.getHeader("filePath", String.class).replaceAll("-","/");
+        String destDir = java.net.URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8")
+        		.replaceAll(DIRECTORY_SEP, "/");
         
-        log.debug("filepAth: " + filePath);
+        log.debug("Destination directory: " + destDir);
+        
         InputRepresentation representation =
             new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
 
@@ -155,7 +139,7 @@ public class ZRouteBuilder extends RouteBuilder {
             				uploadData.putFormField(item.getFieldName(), item.getString());
             			}
             			else {
-            				Path destination = Paths.get(filePath, item.getName());
+            				Path destination = Paths.get(destDir, item.getName());
             				Files.createDirectories(destination.getParent());
     	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
     	                		UserFile uf = new UserFile(destination, item.getFieldName());
@@ -168,7 +152,6 @@ public class ZRouteBuilder extends RouteBuilder {
             e.printStackTrace();
         }
         return uploadData;
-
     }
 
 	/**
@@ -184,6 +167,11 @@ public class ZRouteBuilder extends RouteBuilder {
 		 */
 		restConfiguration()
 		.component("restlet")
+		.componentProperty("urlDecodeHeaders", "true")
+		.bindingMode(RestBindingMode.json)
+		.skipBindingOnErrorCode(false)
+		.dataFormatProperty("prettyPrint", "true")
+		
 		.host(serviceConfig.getHost())
 		.port(serviceConfig.getPort())
 		.bindingMode(RestBindingMode.auto)
@@ -192,7 +180,7 @@ public class ZRouteBuilder extends RouteBuilder {
 		rest(serviceConfig.getContextUri()).produces("application/json")
 		
 			// Upload a File
-	        .post("/new/{filePath}").to("direct:rest.upload").outType(Map.class)
+	        .post("/new/{destDir}").to("direct:rest.upload").outType(Map.class)
 
 	        // Update a File
 //	        .put("/mod/{filePath}").to("direct:putFile")
@@ -213,7 +201,7 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 		
 	// Replies -> Authentication
-	from("direct:auth").process(new Pinger(getContext(), objectMapper,
+	from("direct:auth").process(new LoginProcessor(getContext(), objectMapper,
 			http4Suffix(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl())), headerForAuthorizeAccount));
 
 	// Replies -> List of buckets
@@ -237,7 +225,9 @@ public class ZRouteBuilder extends RouteBuilder {
 		    @Override
 		    public void process(Exchange exchange) throws JsonProcessingException {
 		    		UploadData obj = (UploadData) getReply(exchange, Verb.transientUpload);
-				exchange.getOut().setBody(objectMapper.writeValueAsString(obj.getFiles().stream().collect(Collectors.toMap(router::getLocalURL, uf -> uf.getName() ))));
+		    		Map<String, String> filemap = obj.getFiles().stream().collect(Collectors.toMap(router::getLocalURL, uf -> uf.getName() ));
+		    		String sjson = objectMapper.writeValueAsString(filemap);
+				exchange.getOut().setBody(sjson);
 		    }
 		});
 
@@ -263,7 +253,7 @@ public class ZRouteBuilder extends RouteBuilder {
 //	.process(ex -> { UploadData up = ex.getIn().getHeader("locprocdata", UploadData.class); log.debug(up.getFiles());})
 //	.pipeline().to("direct:auth", "direct:get_up_url", "direct:upload");
 	
-	Processor processFileItem = new CloudFSProcessor() {
+	final Processor processFileItem = new CloudFSProcessor() {
 	    @Override
 	    public void process(Exchange exchange) throws Exception {
 	    	
@@ -311,7 +301,6 @@ public class ZRouteBuilder extends RouteBuilder {
 	    		log.debug(h.getName() + " : " +  h.getValue());
 		    }
 
-//		
 		log.debug("uploadUrl getStatusLine " + response.getStatusLine());
 		
 		
@@ -418,81 +407,6 @@ public class ZRouteBuilder extends RouteBuilder {
 	    }
 
 	};
-/*
-
-curl \
-    -H "Authorization: $UPLOAD_AUTHORIZATION_TOKEN" \
-    -H "X-Bz-File-Name: ${FILE_REMOTE_NAME}" \
-    -H "Content-Type: $MIME_TYPE" \
-    -H "X-Bz-Content-Sha1: $SHA1_OF_FILE" \
-    -H "X-Bz-Info-Author: unknown" \
-    --data-binary "@$FILE_TO_UPLOAD" \
-    $UPLOAD_URL    
-
-*/
-	
-//	.process(ex -> toMultipart(ex));
-//	from("direct:upload")
-//		.process(exchange -> {
-//			final B2Response authBody = exchange.getIn().getHeader(Pinger.B2AUTHN, B2Response.class);
-//			exchange.getOut().copyFrom(exchange.getIn());
-//
-//			log.debug("uploadUrl " + authBody.getUploadUrl());
-//
-//			
-//			 final MultipartEntityBuilder entityBuilder = MultipartEntityBuilder.create();
-//			 UploadData data = exchange.getIn().getHeader("locprocdata", UploadData.class);
-//			 data.getFiles().entrySet().forEach(ent -> {
-//				 entityBuilder.addBinaryBody(ent.getValue(), ent.getKey().toFile());
-//			 });
-//			 data.getMeta().entrySet().forEach(ent -> {
-//				 entityBuilder.addTextBody(ent.getKey(), ent.getValue());
-//			 });
-//			 
-//
-//			 MultipartEntity entity = new MultipartEntity();
-//			 File upfile = new File("ReadMe.txt");
-//			 log.debug("upfile.length() " + upfile.length());
-//			 log.debug("sha1(upfile) " + sha1(upfile));
-//			 
-//			    entity.addPart("file", new FileBody(upfile));
-//
-//			    String SHA = sha1(upfile);
-//			    
-//			    HttpPost request = new HttpPost(authBody.getUploadUrl());
-//			    request.setHeader("Authorization", authBody.getAuthorizationToken());
-//			    request.setHeader("Content-Type", "b2/x-auto");
-////			    request.setHeader("Content-Length", upfile.length() + "");
-//			    request.setHeader("X-Bz-Content-Sha1", "do_not_verify");
-//			    request.setHeader("X-Bz-File-Name", "dennison-test.ReadMe.txt");
-////			    request.setHeader("Content-Type", "text/plain");
-////			    request.setHeader("X-Bz-Info-Author", "unknown");
-//			    request.setEntity(entity);
-//
-//			    log.debug("request");
-//			    for (org.apache.http.Header h: request.getAllHeaders()) {
-//			    		log.debug(h.getName() + " : " +  h.getValue());
-//			    }
-//			    
-//			    
-//			    		
-//			    
-//			    HttpClient client = new DefaultHttpClient();
-//			    HttpResponse response = client.execute(request);
-//			    log.debug("response:");
-//			    for (org.apache.http.Header h: response.getAllHeaders()) {
-//		    		log.debug(h.getName() + " : " +  h.getValue());
-//			    }
-//
-//			log.debug("uploadUrl getStatusLine " + response.getStatusLine());
-//			
-//			
-//			java.io.ByteArrayOutputStream buf = new ByteArrayOutputStream();
-//			response.getEntity().writeTo(buf);
-//			exchange.getOut().setBody(buf.toString("UTF-8"));
-//	
-//	});
-//	
 	}
 	public void toMultipart(Exchange exchange) {
 
@@ -510,3 +424,25 @@ curl \
 	  exchange.getOut().setBody(entity.build());
 	}
 }
+/*
+ACCOUNT_ID=... # Comes from your account page on the Backblaze web site
+		ACCOUNT_AUTHORIZATION_TOKEN=... # Comes from the b2_authorize_account call
+		curl \
+		    -H "Authorization: ${ACCOUNT_AUTHORIZATION_TOKEN}" \
+		    -d "{\"accountId\": \"$ACCOUNT_ID\", \"bucketTypes\": [\"allPrivate\",\"allPublic\"]}" \
+		    "${API_URL}/b2api/v1/b2_list_buckets"    
+
+		{
+		  "buckets": [
+		    {
+		      "accountId": "a374f8e3e263",
+		      "bucketId": "2ab327a44f788e635ef20613",
+		      "bucketInfo": {},
+		      "bucketName": "b2public",
+		      "bucketType": "allPublic",
+		      "corsRules": [],
+		      "lifecycleRules": [],
+		      "revision": 2
+		    },
+
+*/

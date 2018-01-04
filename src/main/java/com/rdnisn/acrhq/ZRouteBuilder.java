@@ -204,7 +204,6 @@ public class ZRouteBuilder extends RouteBuilder {
 	// Replies -> Authentication
 	from("direct:auth").process(
 			new LoginProcessor(
-				getContext(),
 				objectMapper,
 				serviceConfig.getRemoteAuthenticationUrl(),
 				headerForAuthorizeAccount));

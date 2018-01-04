@@ -77,7 +77,13 @@ public abstract class CloudFSProcessor implements Processor {
 	}
 
 	public static Object getReply(Exchange exchange, Verb action) {
-		Object ans = null;
+		
+		return getReply(exchange, action, Object.class);
+	}
+	
+	public static <T> T getReply(Exchange exchange, Verb action, Class<T> type) {
+		
+		Object ans =  null;
 		
 		switch (action) {
 			case authorizeService : {
@@ -119,7 +125,7 @@ public abstract class CloudFSProcessor implements Processor {
 			default:
 				break;
 		}
-		return ans;
+		return (T) ans;
 	}
 	
 }

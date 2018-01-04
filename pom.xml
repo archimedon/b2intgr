@@ -16,19 +16,18 @@
 		<graphdb.host>localhost:7687</graphdb.host>
 		<graphdb.username>neo4j</graphdb.username>
 		<graphdb.password>reggae</graphdb.password>
-
 		<javax_validation.version>2.0.0.Final</javax_validation.version>
 		<jbossjta.version>4.16.6.Final</jbossjta.version>
 	</properties>
 
 	<repositories>
+
 		<repository>
 			<id>neo4j</id>
 			<url>http://m2.neo4j.org/content/repositories/releases/</url>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
+			<releases><enabled>true</enabled></releases>
 		</repository>
+
 		<repository>
 			<id>jboss</id>
 			<url>https://repository.jboss.org/nexus/content/repositories/snapshots/</url>
@@ -36,6 +35,7 @@
 				<enabled>true</enabled>
 			</snapshots>
 		</repository>
+
 		<repository>
 			<id>boundlessgeo</id>
 			<url>http://repo.boundlessgeo.com/main/</url>
@@ -43,7 +43,9 @@
 				<enabled>true</enabled>
 			</snapshots>
 		</repository>
+
 	</repositories>
+
 	<dependencyManagement>
 
 		<dependencies>
@@ -108,7 +110,6 @@
 			<version>${jbossjta.version}</version>
 		</dependency>
 
-
 		<dependency>
 			<groupId>org.jboss.spec.javax.transaction</groupId>
 			<artifactId>jboss-transaction-api_1.2_spec</artifactId>
@@ -129,66 +130,75 @@
 			<groupId>org.apache.camel</groupId>
 			<artifactId>camel-core</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.camel</groupId>
 			<artifactId>camel-restlet</artifactId>
 		</dependency>
 
-<dependency>
-    <groupId>commons-fileupload</groupId>
-    <artifactId>commons-fileupload</artifactId>
-	    <version>1.3.3</version>
-	</dependency>
+		<dependency>
+		    <groupId>commons-fileupload</groupId>
+		    <artifactId>commons-fileupload</artifactId>
+			<version>1.3.3</version>
+		</dependency>
 
-<dependency>
-    <groupId>org.restlet</groupId>
-    <artifactId>org.restlet.ext.fileupload</artifactId>
-    <version>2.0-M3</version>
-</dependency>
-
+		<dependency>
+		    <groupId>org.restlet</groupId>
+		    <artifactId>org.restlet.ext.fileupload</artifactId>
+		    <version>2.0-M3</version>
+		</dependency>
 
 		<dependency>
 			<groupId>org.apache.camel</groupId>
 			<artifactId>camel-jdbc</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.camel</groupId>
 			<artifactId>camel-jms</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.camel</groupId>
 			<artifactId>camel-spring</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
 			<artifactId>activemq-client</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
 			<artifactId>activemq-camel</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
 			<artifactId>activemq-pool</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
 			<artifactId>activemq-broker</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
 			<artifactId>activemq-spring</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
 			<artifactId>activemq-kahadb-store</artifactId>
 		</dependency>
-<!-- 		<dependency>
-			<groupId>org.apache.activemq</groupId>
-			<artifactId>activemq-core</artifactId>
-			<version>5.7.0</version>
-		</dependency>
- -->
+	<!--
+	 		<dependency>
+				<groupId>org.apache.activemq</groupId>
+				<artifactId>activemq-core</artifactId>
+				<version>5.7.0</version>
+			</dependency>
+	-->
 		<!-- <dependency> <groupId>org.neo4j</groupId> <artifactId>neo4j-ogm-core</artifactId> 
 			<version>3.0.0</version> <scope>compile</scope> </dependency> -->
 		<!-- Only add if you're using the Bolt driver -->

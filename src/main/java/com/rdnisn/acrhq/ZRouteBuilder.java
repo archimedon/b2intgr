@@ -33,11 +33,9 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
@@ -200,11 +198,16 @@ public class ZRouteBuilder extends RouteBuilder {
 //	        .delete("/{filePath}").to("direct:rest.rm")
 //	        .delete("/dir/{dirPath}").to("direct:rest.rmdir")
 	        ;
-		
+	
+		from("direct:start").to("direct:auth");
 		
 	// Replies -> Authentication
-	from("direct:auth").process(new LoginProcessor(getContext(), objectMapper,
-			http4Suffix(getHttp4Proto(serviceConfig.getRemoteAuthenticationUrl())), headerForAuthorizeAccount));
+	from("direct:auth").process(
+			new LoginProcessor(
+				getContext(),
+				objectMapper,
+				serviceConfig.getRemoteAuthenticationUrl(),
+				headerForAuthorizeAccount));
 
 	// Replies -> List of buckets
 	from("direct:rest.list_buckets")

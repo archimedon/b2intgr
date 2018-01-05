@@ -114,6 +114,7 @@ public class ZRouteBuilder extends RouteBuilder {
 	
 	private UploadData saveLocally(final Exchange exchange) throws UnsupportedEncodingException{
 		Message messageIn = exchange.getIn();
+		log.debug("saveLocally: \n" + CloudFSProcessor.dumpExch(exchange));
 		
         MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
         String destDir = java.net.URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8")
@@ -198,29 +199,37 @@ public class ZRouteBuilder extends RouteBuilder {
 //	        .delete("/{filePath}").to("direct:rest.rm")
 //	        .delete("/dir/{dirPath}").to("direct:rest.rmdir")
 	        ;
-	
-		from("direct:start").to("direct:auth");
+
+
+		
+//		from("timer:healthCheck?period=10000")
+//		.removeHeaders("*")
+//        .to("activemq:b2auth");
 		
 	// Replies -> Authentication
-	from("direct:auth").process(
-			new LoginProcessor(
-				objectMapper,
-				serviceConfig.getRemoteAuthenticationUrl(),
-				headerForAuthorizeAccount));
+	from("activemq:b2auth")
+		.process(new LoginProcessor(
+			objectMapper,
+			serviceConfig.getRemoteAuthenticationUrl(),
+			headerForAuthorizeAccount)
+		);
 
 	// Replies -> List of buckets
 	from("direct:rest.list_buckets")
-		.to("direct:auth", "direct:listdir");
+		.to("activemq:b2auth", "direct:listdir");
 	
 	// Replies -> HREF to resource
 	from("direct:rest.upload").to("direct:localsave");
 	
 	from("direct:localsave")
-		.to("direct:locprocdata").wireTap("direct:backproc")
+		.to("direct:localsave").wireTap("activemq:b2upload")
 		.to("direct:uploadreply");
 		
+
+	
+	
 	ZRouteBuilder router = this;
-	from("direct:locprocdata")
+	from("direct:localsave")
 		.process(exchange -> CloudFSProcessor.setReply(exchange, Verb.transientUpload, saveLocally(exchange)));
 	
 	
@@ -240,14 +249,16 @@ public class ZRouteBuilder extends RouteBuilder {
         @Override
         @SuppressWarnings("unchecked")
         public <T> T evaluate(Exchange exchange, Class<T> type) {
+    		log.debug(CloudFSProcessor.dumpExch(exchange));
+
         		exchange.getOut().copyFrom(exchange.getIn());
-            final UploadData body = exchange.getIn().getHeader("locprocdata", UploadData.class);
-            return (T) body.getFiles();
+//            final UploadData body = exchange.getIn().getHeader("locprocdata", UploadData.class);
+            return (T) null;
         }
 	 }
 	 
-	 from("direct:backproc")
-		.to("direct:auth")
+	 from("activemq:b2upload")
+		.to("activemq:b2auth")
 		.split(new FileSplitter())
 		.to("direct:get_up_url", "direct:processFileItem")
     .end();
@@ -255,20 +266,19 @@ public class ZRouteBuilder extends RouteBuilder {
 //		exchange.getOut().setBody(objectMapper.writeValueAsString(exchange.getIn().getBody()));
 //	}).to("file:upload");
 //	.process(ex -> { UploadData up = ex.getIn().getHeader("locprocdata", UploadData.class); log.debug(up.getFiles());})
-//	.pipeline().to("direct:auth", "direct:get_up_url", "direct:upload");
+//	.pipeline().to("activemq:b2auth", "direct:get_up_url", "direct:upload");
 	
 	final Processor processFileItem = new CloudFSProcessor() {
 	    @Override
 	    public void process(Exchange exchange) throws Exception {
-	    	
+    		log.debug(CloudFSProcessor.dumpExch(exchange));
+
 //	    		final B2Response authBody = (B2Response) getReply(exchange, Verb.authorizeService);
 	    		UserFile userFile = exchange.getIn().getBody(UserFile.class);
 	    		
-	    		String authToken = (String) CloudFSProcessor.getReply(exchange, Verb.authToken);
 	    		String uploadUrl = (String) CloudFSProcessor.getReply(exchange, Verb.uploadUrl);
 	    		String uploadToken = (String) CloudFSProcessor.getReply(exchange, Verb.uploadToken);
 
-	    		log.debug("authToken: " + authToken);
 	    		log.debug("uploadUrl: " + uploadUrl);
 	    		log.debug("uploadToken: " + uploadToken);
 		log.debug("procFile: " + userFile.getName());
@@ -315,8 +325,9 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 	    @Override
 	    public void process(Exchange exchange) throws Exception {
+    		log.debug(CloudFSProcessor.dumpExch(exchange));
 
-	    	final B2Response authBody = (B2Response) getReply(exchange, Verb.authorizeService);
+	    	final AuthResponse authBody = (AuthResponse) getReply(exchange, Verb.authorizeService);
 		exchange.getOut().copyFrom(exchange.getIn());
 
 		final Message responseOut = getContext().createProducerTemplate()
@@ -337,36 +348,7 @@ public class ZRouteBuilder extends RouteBuilder {
 	});
 	
 	from("direct:get_up_url")
-		.process(exchange -> {
-			final B2Response authBody = (B2Response) CloudFSProcessor.getReply(exchange, Verb.authorizeService);
-			exchange.getOut().copyFrom(exchange.getIn());
-			
-			log.debug("Get upload URL");
-
-			final Message responseOut = getContext().createProducerTemplate()
-				.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
-					
-					log.debug(String.format("Request(%s)", authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"));
-					
-					innerExchg.getIn()
-						.setHeader("Authorization", authBody.getAuthorizationToken());
-					
-					innerExchg.getIn()
-						.setBody(objectMapper.writeValueAsString(ImmutableMap.of("bucketId", "2ab327a44f788e635ef20613")));
-			}).getOut();
-			
-			try {
-				B2Response authResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
-				CloudFSProcessor.setReply(exchange, Verb.uploadUrl, authResponse.getUploadUrl());
-				CloudFSProcessor.setReply(exchange, Verb.uploadToken, authResponse.getAuthorizationToken());
-				authBody.setUploadUrl(authResponse.getUploadUrl());
-				authBody.setBucketId(authResponse.getBucketId());
-//				exchange.getOut().setHeader("Authorization", authResponse.getAuthorizationToken());
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			
-		});
+		.process(getUploadUrl());
 
 	Processor p = new Processor() {
 
@@ -403,6 +385,42 @@ public class ZRouteBuilder extends RouteBuilder {
 
 	};
 	}
+	private Processor getUploadUrl() {
+		return (exchange) -> new Processor() {
+			@Override
+			public void process(Exchange exchange) throws Exception {
+				
+	    			log.debug("getUploadUrl: \n" + CloudFSProcessor.dumpExch(exchange));
+
+				final AuthResponse authBody = (AuthResponse) CloudFSProcessor.getReply(exchange, Verb.authorizeService);
+				exchange.getOut().copyFrom(exchange.getIn());
+				
+				log.debug("Get upload URL");
+
+				final Message responseOut = getContext().createProducerTemplate()
+					.send(getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"), innerExchg -> {
+						
+						log.debug(String.format("Request(%s)", authBody.getApiUrl() + "/b2api/v1/b2_get_upload_url"));
+						
+						innerExchg.getIn()
+							.setHeader("Authorization", authBody.getAuthorizationToken());
+						
+						innerExchg.getIn()
+							.setBody(objectMapper.writeValueAsString(ImmutableMap.of("bucketId", "2ab327a44f788e635ef20613")));
+				}).getOut();
+				
+				try {
+					B2Response verbResponse = objectMapper.readValue(responseOut.getBody(String.class), B2Response.class);
+					CloudFSProcessor.setReply(exchange, Verb.uploadUrl, verbResponse.getUploadUrl());
+					CloudFSProcessor.setReply(exchange, Verb.uploadToken, verbResponse.getAuthorizationToken());
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			
+		};
+	}
+
 	public void toMultipart(Exchange exchange) {
 
 	  // Read the incoming message…
@@ -418,6 +436,36 @@ public class ZRouteBuilder extends RouteBuilder {
 	  // Set multipart entity as the outgoing message’s body…
 	  exchange.getOut().setBody(entity.build());
 	}
+	
+	public static class MyCustomExpression implements Expression {
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T evaluate(Exchange exchange, Class<T> type) {
+            final String body = exchange.getIn().getBody(String.class);
+
+            // just split the body by comma
+            String[] parts = body.split(",");
+            List<String> list = new ArrayList<String>();
+            for (String part : parts) {
+                list.add(part);
+            }
+
+            return (T) list.iterator();
+        }
+    }
+	
+	protected RouteBuilder createRouteBuilder() throws Exception {
+        return new RouteBuilder() {
+            public void configure() {
+                from("direct:start").setHeader(Exchange.HTTP_METHOD, new MyCustomExpression()).to("http://www.google.com");
+                from("direct:reset")
+                    .errorHandler(deadLetterChannel("direct:recovery").maximumRedeliveries(1))
+                    .setHeader(Exchange.HTTP_METHOD, new MyCustomExpression()).to("http://www.google.com").to("mock:result");
+                from("direct:recovery").setHeader(Exchange.HTTP_METHOD, new MyCustomExpression()).to("http://www.google.com").to("mock:recovery");
+            }
+        };
+    }
 }
 /*
 ACCOUNT_ID=... # Comes from your account page on the Backblaze web site

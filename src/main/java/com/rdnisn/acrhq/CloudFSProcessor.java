@@ -35,23 +35,25 @@ public abstract class CloudFSProcessor implements Processor {
 
 	public enum Verb {
 		uploadObject, deleteObject, deleteBucket, createBucket, listBuckets, authorizeService, transientUpload
-		, uploadUrl, uploadToken, authToken
+		, uploadUrl, uploadToken // authToken
 	}
 	
 	public static void setReply(final Exchange exchange, Verb action, Object val) {
+
 		switch (action) {
 			case authorizeService : {
 //				exchange.getOut().setHeader(B2AUTHN, val);
-//				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
+				log.debug("setReply");
+				log.debug("the val: " + val);
+				exchange.getOut().setHeader(B2AUTHN, val);
 				exchange.setProperty(B2AUTHN, val);
-				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
-				exchange.getOut().setHeader("Authorization", ((B2Response)val).getAuthorizationToken());
+				exchange.getOut().setHeader("Authorization", ((AuthResponse)val).getAuthorizationToken());
 				break;
 			}
-			case authToken : {
-				exchange.getOut().setHeader("authToken",  val);
-		    		break;
-		    	}
+//			case authToken : {
+//				exchange.getOut().setHeader("authToken",  val);
+//		    		break;
+//		    	}
 			case listBuckets : break;
 			case transientUpload : {
 				exchange.getOut().setHeader("locprocdata",  val);
@@ -82,21 +84,26 @@ public abstract class CloudFSProcessor implements Processor {
 	}
 	
 	public static <T> T getReply(Exchange exchange, Verb action, Class<T> type) {
-		
+
 		Object ans =  null;
 		
 		switch (action) {
 			case authorizeService : {
-//				ans = exchange.getIn().getHeader(B2AUTHN);
-				ans = exchange.getProperty(B2AUTHN);
+				
+				log.debug("getReply");
+				if ( (ans = exchange.getIn().getHeader(B2AUTHN)) == null) {
+					ans = exchange.getOut().getHeader(B2AUTHN);
+				}
+//				ans = exchange.getProperty(B2AUTHN);
+				log.debug("ans: " + ans);
 				break;
 			}
-			case authToken : {
-				ans = exchange.getIn().getHeader("authToken");
-		    		break;
-		    	}
+//			case authToken : {
+//				ans = exchange.getIn().getHeader("authToken");
+//		    		break;
+//		    	}
 			case listBuckets : {
-				ans = exchange.getIn().getHeader(B2AUTHN);
+				ans = exchange.getIn().getHeader("listBuckets");
 				break;
 			}
 			case createBucket :{
@@ -121,11 +128,16 @@ public abstract class CloudFSProcessor implements Processor {
 				ans = exchange.getIn().getHeader("locprocdata");
 				break;
 			}
-
-			default:
-				break;
 		}
 		return (T) ans;
 	}
 	
+	
+	public static String dumpExch(Exchange exchange) {
+		Map p = new HashMap();
+		p.put("exch", exchange.getProperties());
+		p.put("in" , exchange.getIn().getHeaders());
+		p.put("Out" , exchange.getOut().getHeaders());
+		return "Dump: \n" + p.toString();
+	}
 }

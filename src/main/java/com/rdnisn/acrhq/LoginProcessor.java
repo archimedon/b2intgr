@@ -60,7 +60,7 @@ public class LoginProcessor extends CloudFSProcessor implements Processor {
 			if (response.getStatusLine().getStatusCode() == 200) {
 				ByteArrayOutputStream buf = new ByteArrayOutputStream();
 				response.getEntity().writeTo(buf);
-				ans = objectMapper.readValue(buf.toString("UTF-8"), B2Response.class).getAuthorizationToken(); 
+				ans = objectMapper.readValue(buf.toString("UTF-8"), AuthResponse.class).getAuthorizationToken(); 
 				log.debug("Received authorizationToken: " + ans);
 			}
 		} catch (IOException e) {
@@ -85,7 +85,7 @@ public class LoginProcessor extends CloudFSProcessor implements Processor {
 		
 		try {
 			b2producerTemplate.stop();
-			if ( responseOut.getHeader(Exchange.HTTP_RESPONSE_TEXT, Integer.class) == 200 ) {
+			if ( responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class) == 200 ) {
 				auth = objectMapper.readValue(responseOut.getBody(String.class), AuthResponse.class);
 			}
 		} catch (Exception e) {
@@ -96,11 +96,14 @@ public class LoginProcessor extends CloudFSProcessor implements Processor {
 	
 	@Override
 	public void process(Exchange exchange) {
-		exchange.getOut().copyFrom(exchange.getIn());
-
+		log.debug(dumpExch(exchange));
+		
 		AuthResponse authResponse = getReply(exchange, Verb.authorizeService, AuthResponse.class);
 		
-		if ( authResponse == null || authResponse.isExpired() ) {
+		exchange.getOut().copyFrom(exchange.getIn());
+
+		
+		if ( authResponse == null ) {
 			
 			log.info("Authentication required!");
 

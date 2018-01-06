@@ -79,6 +79,14 @@ public class ZRouteBuilder extends RouteBuilder {
 		getContext().getGlobalOptions().put("CamelJacksonEnableTypeConverter", "true");
 		// allow Jackson json to convert to pojo types also
 		getContext().getGlobalOptions().put("CamelJacksonTypeConverterToPojo", "true");
+		
+		
+		Map<String, String> map = ImmutableMap.of(
+			"Authorization", "Basic " + headerForAuthorizeAccount
+		); 
+		
+		String authToken = (new MultipartAgent(serviceConfig.getRemoteAuthenticationUrl(), map)).doGet();
+		log.debug("show me: " + authToken);
 	}
 
 	private OnExceptionDefinition httpExceptionHandler() {
@@ -114,7 +122,7 @@ public class ZRouteBuilder extends RouteBuilder {
 	
 	private UploadData saveLocally(final Exchange exchange) throws UnsupportedEncodingException{
 		Message messageIn = exchange.getIn();
-		log.debug("saveLocally: \n" + CloudFSProcessor.dumpExch(exchange));
+		log.debug(CloudFSProcessor.dumpExch(exchange));
 		
         MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
         String destDir = java.net.URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8")
@@ -200,7 +208,6 @@ public class ZRouteBuilder extends RouteBuilder {
 //	        .delete("/dir/{dirPath}").to("direct:rest.rmdir")
 	        ;
 
-
 		
 //		from("timer:healthCheck?period=10000")
 //		.removeHeaders("*")
@@ -222,14 +229,14 @@ public class ZRouteBuilder extends RouteBuilder {
 	from("direct:rest.upload").to("direct:localsave");
 	
 	from("direct:localsave")
-		.to("direct:localsave").wireTap("activemq:b2upload")
+		.to("direct:locprocdata").wireTap("activemq:b2upload")
 		.to("direct:uploadreply");
 		
 
 	
 	
 	ZRouteBuilder router = this;
-	from("direct:localsave")
+	from("direct:locprocdata")
 		.process(exchange -> CloudFSProcessor.setReply(exchange, Verb.transientUpload, saveLocally(exchange)));
 	
 	
@@ -252,8 +259,9 @@ public class ZRouteBuilder extends RouteBuilder {
     		log.debug(CloudFSProcessor.dumpExch(exchange));
 
         		exchange.getOut().copyFrom(exchange.getIn());
+        		UploadData body = CloudFSProcessor.getReply(exchange, Verb.transientUpload, UploadData.class);
 //            final UploadData body = exchange.getIn().getHeader("locprocdata", UploadData.class);
-            return (T) null;
+            return (T) body.getFiles();
         }
 	 }
 	 
@@ -386,11 +394,10 @@ public class ZRouteBuilder extends RouteBuilder {
 	};
 	}
 	private Processor getUploadUrl() {
-		return (exchange) -> new Processor() {
-			@Override
+		return new Processor() {
 			public void process(Exchange exchange) throws Exception {
 				
-	    			log.debug("getUploadUrl: \n" + CloudFSProcessor.dumpExch(exchange));
+	    		log.debug(CloudFSProcessor.dumpExch(exchange));
 
 				final AuthResponse authBody = (AuthResponse) CloudFSProcessor.getReply(exchange, Verb.authorizeService);
 				exchange.getOut().copyFrom(exchange.getIn());

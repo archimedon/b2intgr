@@ -45,6 +45,7 @@ public abstract class CloudFSProcessor implements Processor {
 //				exchange.getOut().setHeader(B2AUTHN, val);
 				log.debug("setReply");
 				log.debug("the val: " + val);
+				exchange.getIn().setHeader(B2AUTHN, val);
 				exchange.getOut().setHeader(B2AUTHN, val);
 				exchange.setProperty(B2AUTHN, val);
 				exchange.getOut().setHeader("Authorization", ((AuthResponse)val).getAuthorizationToken());
@@ -61,10 +62,12 @@ public abstract class CloudFSProcessor implements Processor {
 		    	}
 			case uploadUrl : {
 				exchange.getOut().setHeader("uploadUrl", val);
+				exchange.getIn().setHeader("uploadUrl", val);
 				break;
 			}
 			case uploadToken : {
 				exchange.getOut().setHeader("uploadToken", val);
+				exchange.getIn().setHeader("uploadToken", val);
 				break;
 			}
 			case createBucket : break;

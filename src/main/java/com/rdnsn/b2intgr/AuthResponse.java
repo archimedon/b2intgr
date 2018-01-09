@@ -1,8 +1,9 @@
-package com.rdnisn.acrhq;
+package com.rdnsn.b2intgr;
 
 import java.util.Date;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -90,32 +91,7 @@ public class AuthResponse extends B2ResponseBase {
 		this.recommendedPartSize = recommendedPartSize;
 	}
 
-	
-	
-	
-    
-	private static long lastmod = 0;
-	//	final private static final long TTL = 10;
-	final private static long TTL = 12 * 60 * 58;
-	
-
-	
-	public boolean isExpired() {
-		// TODO Auto-generated method stub
-		return false;
+	public String resolveGetUploadUrl() {
+		return apiUrl + "/b2api/v1/b2_get_upload_url";
 	}
-
-	
-	
-	private boolean noToken() {
-		return	
-			StringUtils.isBlank(authorizationToken) || ( utcInSecs() - lastmod) >= TTL;
-	}
-	
-
-	private long utcInSecs() {
-		return new Date().getTime() / 1000;
-	}
-
-
 }

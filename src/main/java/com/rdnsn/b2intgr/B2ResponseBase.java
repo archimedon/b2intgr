@@ -1,4 +1,6 @@
-package com.rdnisn.acrhq;
+package com.rdnsn.b2intgr;
+
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -12,4 +14,9 @@ public class B2ResponseBase {
 	
 	@JsonProperty
 	private String message;
+	
+	public String toString() {
+		return ReflectionToStringBuilder.toString(this);
+	}
+
 }

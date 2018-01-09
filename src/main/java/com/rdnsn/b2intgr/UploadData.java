@@ -1,4 +1,4 @@
-package com.rdnisn.acrhq;
+package com.rdnsn.b2intgr;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -78,16 +80,21 @@ public class UploadData {
 class UserFile implements Comparable<UserFile> {
 	
 	@JsonProperty
-	private final Path filepath;
+	private Path filepath;
 	
 	@JsonProperty
-	private final String name;
+	private String name;
 	
 	@JsonProperty
 	private final Map<String, String> meta;
 	
 	@JsonProperty
 	private String contentType;
+	
+	public UserFile() {
+		super();
+		meta = (new ImmutableMap.Builder<String, String>()).build();
+	}
 	
 	public UserFile(Path filepath) {
 		this(filepath, "", (new ImmutableMap.Builder<String, String>()).build());
@@ -104,6 +111,14 @@ class UserFile implements Comparable<UserFile> {
 		this.meta = meta;
 	}
 	
+	public void setFilepath(Path filepath) {
+		this.filepath = filepath;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
 	public Path getFilepath() {
 		return filepath;
 	}
@@ -128,6 +143,10 @@ class UserFile implements Comparable<UserFile> {
 	public void setContentType(String contentType) {
 		this.contentType = contentType;
 	}
+	public String toString() {
+		return ReflectionToStringBuilder.toString(this);
+	}
+
 
 }
 

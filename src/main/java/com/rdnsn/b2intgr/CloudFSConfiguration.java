@@ -1,4 +1,6 @@
-package com.rdnisn.acrhq;
+package com.rdnsn.b2intgr;
+
+import java.util.Base64;
 
 import javax.validation.constraints.NotNull;
 
@@ -96,5 +98,10 @@ public class CloudFSConfiguration {
 	
 	public void setRemoteStorageConf(RemoteStorageAPI remoteStorage) {
 		this.remoteStorageConf = remoteStorage;
+	}
+
+	public String getBasicAuthHeader() {
+		return Base64.getEncoder()
+			.encodeToString((getRemoteAccountId() + ":" + getRemoteApplicationKey()).getBytes());
 	}
 }

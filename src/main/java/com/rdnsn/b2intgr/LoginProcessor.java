@@ -1,7 +1,7 @@
-package com.rdnisn.acrhq;
+package com.rdnsn.b2intgr;
 
-import static com.rdnisn.acrhq.RemoteStorageAPI.getHttp4Proto;
-import static com.rdnisn.acrhq.RemoteStorageAPI.http4Suffix;
+import static com.rdnsn.b2intgr.RemoteStorageAPI.getHttp4Proto;
+import static com.rdnsn.b2intgr.RemoteStorageAPI.http4Suffix;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -30,7 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rdnisn.acrhq.CloudFSProcessor.Verb;
+import com.rdnsn.b2intgr.CloudFSProcessor.Verb;
 
 public class LoginProcessor extends CloudFSProcessor implements Processor {
 	protected Logger log = LoggerFactory.getLogger(getClass());

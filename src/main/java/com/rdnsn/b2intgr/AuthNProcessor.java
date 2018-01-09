@@ -1,4 +1,4 @@
-package com.rdnisn.acrhq;
+package com.rdnsn.b2intgr;
 
 import java.io.FileInputStream;
 import java.io.IOException;

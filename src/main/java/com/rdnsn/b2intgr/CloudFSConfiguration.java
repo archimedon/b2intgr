@@ -1,5 +1,6 @@
 package com.rdnsn.b2intgr;
 
+import java.io.File;
 import java.util.Base64;
 
 import javax.validation.constraints.NotNull;
@@ -33,7 +34,7 @@ public class CloudFSConfiguration {
 	
 	@NotNull
 	@JsonProperty
-	private String docRoot = "/Users/ronalddennison/eclipse-workspace/acrhq";
+	private String docRoot = "/tmp/appRoot";
 	
 	@NotNull
 	@JsonProperty
@@ -54,6 +55,10 @@ public class CloudFSConfiguration {
 
 	public void setDocRoot(String docRoot) {
 		this.docRoot = docRoot;
+		File f = new File(docRoot);
+		if (! f.exists()) {
+			f.mkdirs();
+		}
 	}
 
 	public String getHost() {

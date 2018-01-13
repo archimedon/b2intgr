@@ -11,6 +11,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -523,7 +524,9 @@ public class ZRouteBuilder extends RouteBuilder {
 		log.debug(CloudFSProcessor.dumpExch(exchange));
 		
         MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-        String destDir = java.net.URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8")
+        String destDir = serviceConfig.getDocRoot()
+        		+ File.separatorChar
+        		+ URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8")
         		.replaceAll(DIRECTORY_SEP, "/");
         
         log.debug("Destination directory: " + destDir);

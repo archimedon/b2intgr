@@ -2,7 +2,7 @@
 	"host" : "localhost",
 	"port": 8080,
 	"contextUri" : "/cloudfs/api",
-	"docRoot": "/Users/ronalddennison/eclipse-workspace/acrhq",
+	"docRoot": "/tmp/b2intgr",
 	"protocol": "http",
 	"remoteStorageConf" : {
 		"accountId" : "a374f8e3e263",

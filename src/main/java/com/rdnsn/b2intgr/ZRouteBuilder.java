@@ -4,12 +4,16 @@ import static com.rdnsn.b2intgr.RemoteStorageAPI.getHttp4Proto;
 import static com.rdnsn.b2intgr.RemoteStorageAPI.http4Suffix;
 import static com.rdnsn.b2intgr.RemoteStorageAPI.sha1;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.file.Files;
@@ -73,6 +77,7 @@ public class ZRouteBuilder extends RouteBuilder {
 	private final String headerForAuthorizeAccount;
 	private final AuthAgent authAgent;
 //	private final JsonDataFormat jsonUploadAuthFormat;
+    private static final int BUFFER_SIZE = 8192;
 
 	public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
@@ -447,25 +452,27 @@ public class ZRouteBuilder extends RouteBuilder {
 		 */
 		restConfiguration()
 		.component("restlet")
+		.host(serviceConfig.getHost())
+		.port(serviceConfig.getPort())
 		.componentProperty("urlDecodeHeaders", "true")
-		.bindingMode(RestBindingMode.json)
 		.skipBindingOnErrorCode(false)
 		.dataFormatProperty("prettyPrint", "true")
 		
-		.host(serviceConfig.getHost())
-		.port(serviceConfig.getPort())
 		.bindingMode(RestBindingMode.auto)
-		.componentProperty("chunked", "true");
+		.componentProperty("chunked", "true")
+		;
 
 		return rest(serviceConfig.getContextUri()).produces("application/json")
 				// Upload a File
-		        .post("/new/{destDir}").to("direct:rest.upload").outType(Map.class)
+		        .post("/new/{destDir}").to("direct:rest.upload")
+		        .bindingMode(RestBindingMode.off)
+		        .consumes("multipart/form-data").produces("application/json")
 
 		        // Update a File
 //		        .put("/mod/{filePath}").to("direct:putFile")
 
 		        // List Buckets
-		        .get("/ls").to("direct:rest.list_buckets")
+		        .get("/ls").to("direct:rest.list_buckets").produces("application/json")
 		        
 		        // List Directory
 //		        .get("/ls/{dirPath}").to("direct:rest.lsdir")
@@ -520,10 +527,12 @@ public class ZRouteBuilder extends RouteBuilder {
 	}
 	
 	private UploadData saveLocally(final Exchange exchange) throws UnsupportedEncodingException{
-		Message messageIn = exchange.getIn();
-		log.debug(CloudFSProcessor.dumpExch(exchange));
+		final Message messageIn = exchange.getIn();
 		
         MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
+        InputRepresentation representation =
+            new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
+
         String destDir = serviceConfig.getDocRoot()
         		+ File.separatorChar
         		+ URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8")
@@ -531,9 +540,6 @@ public class ZRouteBuilder extends RouteBuilder {
         
         log.debug("Destination directory: " + destDir);
         
-        InputRepresentation representation =
-            new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
-
 		UploadData uploadData = null;
 		
         try {
@@ -544,16 +550,18 @@ public class ZRouteBuilder extends RouteBuilder {
             	
             		uploadData = new UploadData();
             	
-            		for (FileItem item : items) {
+            		for (final FileItem item : items) {
             			if (item.isFormField()) {
             				uploadData.putFormField(item.getFieldName(), item.getString());
             			}
             			else {
             				Path destination = Paths.get(destDir, item.getName());
             				Files.createDirectories(destination.getParent());
+            				log.debug("bytes: " + item.getSize());
     	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
     	                		UserFile uf = new UserFile(destination, item.getFieldName());
     	                		uf.setContentType(item.getContentType());
+    	                		item.delete();
             				uploadData.addFile(uf);
             			}
             		}

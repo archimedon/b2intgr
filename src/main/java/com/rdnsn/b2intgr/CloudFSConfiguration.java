@@ -8,6 +8,7 @@ import javax.validation.constraints.NotNull;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.rdnsn.b2intgr.api.RemoteStorageConfiguration;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize()
@@ -18,7 +19,7 @@ public class CloudFSConfiguration {
 	 */
 	@NotNull
     @JsonProperty
-	private RemoteStorageAPI remoteStorageConf;
+	private RemoteStorageConfiguration remoteStorageConf;
     
 	@NotNull
 	@JsonProperty
@@ -39,7 +40,10 @@ public class CloudFSConfiguration {
 	@NotNull
 	@JsonProperty
 	private String protocol = "http";
-	
+
+	@NotNull
+	@JsonProperty
+	private String customSeparator = "\\^";
 	
 	public String getProtocol() {
 		return protocol;
@@ -76,13 +80,29 @@ public class CloudFSConfiguration {
 	public void setPort(int port) {
 		this.port = port;
 	}
-	
+
+	public String getCustomSeparator() {
+		return customSeparator;
+	}
+
+	public void setCustomSeparator(String customSeparator) {
+		this.customSeparator = customSeparator;
+	}
+
 	public String getContextUri() {
 		return contextUri;
 	}
 	
 	public void setContextUri(String contextUri) {
 		this.contextUri = contextUri;
+	}
+	
+	public String getRemoteBucketId() {
+		return remoteStorageConf.getBucketId();
+	}
+	
+	public String getRemoteBucketName() {
+		return remoteStorageConf.getBucketName();
 	}
 	
 	public String getRemoteAccountId() {
@@ -97,11 +117,11 @@ public class CloudFSConfiguration {
 		return remoteStorageConf.getAuthenticationUrl();
 	}
 	
-	public RemoteStorageAPI getRemoteStorageConf() {
+	public RemoteStorageConfiguration getRemoteStorageConf() {
 		return remoteStorageConf;
 	}
 	
-	public void setRemoteStorageConf(RemoteStorageAPI remoteStorage) {
+	public void setRemoteStorageConf(RemoteStorageConfiguration remoteStorage) {
 		this.remoteStorageConf = remoteStorage;
 	}
 

@@ -1,4 +1,4 @@
-package com.rdnsn.b2intgr;
+package com.rdnsn.b2intgr.processor;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +26,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.api.AuthResponse;
 
 public abstract class CloudFSProcessor implements Processor {
 	

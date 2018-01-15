@@ -1,4 +1,4 @@
-package com.rdnsn.b2intgr;
+package com.rdnsn.b2intgr.api;
 
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 

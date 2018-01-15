@@ -1,4 +1,4 @@
-package com.rdnsn.b2intgr;
+package com.rdnsn.b2intgr.processor;
 
 import java.io.IOException;
 
@@ -9,6 +9,8 @@ import org.apache.commons.lang3.StringUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.api.AuthResponse;
+import com.rdnsn.b2intgr.api.MultipartAgent;
 
 public class AuthAgent implements AggregationStrategy {
 	
@@ -22,7 +24,7 @@ public class AuthAgent implements AggregationStrategy {
 			remoteAuthenticationUrl,
 			ImmutableMap.of("Authorization", "Basic " + basicAuthHeader)
 		);
-		System.out.println("Retrieved Token: " + getRemoteAuth());
+		log.debug("Retrieved Token: " + getRemoteAuth());
 	}
 	
 	synchronized public AuthResponse getRemoteAuth() {
@@ -38,7 +40,7 @@ public class AuthAgent implements AggregationStrategy {
 	}
 	
 //	
-//	 public UploadAuthResponse getUploadUrl() {
+//	 public GetUploadUrlResponse getUploadUrl() {
 //			final MultipartAgent getupl = new MultipartAgent(
 //					remoteAuthenticationUrl,
 //					ImmutableMap.of("Authorization", "Basic " + basicAuthHeader)

@@ -4,7 +4,12 @@
 	"contextUri" : "/cloudfs/api",
 	"docRoot": "/tmp/b2intgr",
 	"protocol": "http",
+	"customSeparator": "\\^", 
 	"remoteStorageConf" : {
+		"bucket" : {
+			"name" : "b2public",
+			"id" : "2ab327a44f788e635ef20613"
+		},
 		"accountId" : "a374f8e3e263",
 		"applicationKey" : "0012091458045a46b01b14df849c659aebb820a53c",
 		"authenticationUrl": "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"

@@ -1,4 +1,4 @@
-package com.rdnsn.b2intgr;
+package com.rdnsn.b2intgr.api;
 
 import java.util.Date;
 

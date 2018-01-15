@@ -24,6 +24,8 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.processor.AuthAgent;
+import com.rdnsn.b2intgr.route.ZRouteBuilder;
 
 
 /**
@@ -93,11 +95,11 @@ public class MainApp {
 //    	 
 //        @Override
 //        public void afterStart(MainSupport main) {
-//            System.out.println("MainExample with Camel is now started!");
+//            log.debug("MainExample with Camel is now started!");
 //        }
 // 
 //        @Override
 //        public void beforeStop(MainSupport main) {
-//            System.out.println("MainExample with Camel is now being stopped");
+//            log.debug("MainExample with Camel is now being stopped");
 //        }
 //    }

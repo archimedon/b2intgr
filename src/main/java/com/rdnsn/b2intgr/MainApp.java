@@ -1,21 +1,12 @@
 package com.rdnsn.b2intgr;
 
-import org.apache.camel.impl.JndiRegistry;
-import org.apache.camel.impl.SimpleRegistry;
-import org.apache.camel.main.Main;
-import org.apache.camel.main.MainListenerSupport;
-
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.Base64;
 import java.util.Date;
-import java.util.Map;
 
 import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
-import org.apache.camel.ProducerTemplate;
-import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.util.jndi.JndiContext;
 import org.apache.commons.lang.StringUtils;
@@ -23,7 +14,6 @@ import org.apache.commons.lang.StringUtils;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableMap;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
 

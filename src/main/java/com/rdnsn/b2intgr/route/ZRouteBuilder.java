@@ -2,13 +2,16 @@ package com.rdnsn.b2intgr.route;
 
 import static com.rdnsn.b2intgr.api.RemoteStorageConfiguration.getHttp4Proto;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -32,8 +35,10 @@ import org.apache.commons.beanutils.BeanUtils;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ContentType;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -54,6 +59,7 @@ import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
 import com.rdnsn.b2intgr.api.UploadFileResponse;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.processor.CloudFSProcessor;
+import com.rdnsn.b2intgr.processor.UploadProcessor;
 
 /**
  * Base Router
@@ -100,7 +106,7 @@ public class ZRouteBuilder extends RouteBuilder {
 	
 	// Replies -> HREF to resource
 	from("direct:rest.upload")
-		.process(exchange -> exchange.getOut().setBody(saveLocally(exchange)))
+		.process(saveLocally())
 		.wireTap("direct:b2upload")
 		.to("direct:uploadreply")
 	.end();
@@ -123,6 +129,8 @@ public class ZRouteBuilder extends RouteBuilder {
 		});
 	
 	from("direct:b2upload")
+	.delay(1000)
+	.asyncDelayed()
 		.split(new Expression()  {
 	        @Override
 	        @SuppressWarnings("unchecked")
@@ -131,6 +139,9 @@ public class ZRouteBuilder extends RouteBuilder {
 	            return (T) body.getFiles().iterator();
 	        }
 		 })
+//		.delay(1000)
+//		.asyncDelayed()
+		.throttle(1)
 		.process(ex -> { UserFile uf = ex.getIn().getBody(UserFile.class);
 			ex.getIn().setBody(null);
 			ex.getIn().setHeader("userFile", uf);
@@ -161,62 +172,10 @@ public class ZRouteBuilder extends RouteBuilder {
 			return original;
 		})
 		.log("\n\nafter GetUploadUrl:\n${headers}\n\n")
-		.process((exchange) -> {
-			final Message IN = exchange.getIn();
-			final Message OUT = exchange.getOut();
-			
-			
-			UserFile userFile = IN.getHeader("userFile", UserFile.class);
-			GetUploadUrlResponse uploadAuth = IN.getHeader("uploadAuth", GetUploadUrlResponse.class);
-			AuthResponse remoteAuth = IN.getHeader("remoteAuth", AuthResponse.class);
-			
-			Map describe = BeanUtils.describe(remoteAuth);
-
-			
-            final File file = userFile.getFilepath().toFile();
-			
-			final HttpPost request = new HttpPost(uploadAuth.getUploadUrl());
-			request.setEntity(MultipartEntityBuilder.create().addBinaryBody(file.getName(), file).build());
-			
-		    request.setHeader("Authorization", uploadAuth.getAuthorizationToken());
-			request.setHeader("Content-Type", userFile.getContentType());
-			request.setHeader("X-Bz-Content-Sha1", "do_not_verify");
-			request.setHeader("X-Bz-File-Name", userFile.getName());
-			request.setHeader("X-Bz-Info-Author", "unknown");
-//			request.setHeader("Content-Length", file.length() + "");
-
-			try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
-				
-				ByteArrayOutputStream buf = new ByteArrayOutputStream();
-				
-				HttpResponse response = httpclient.execute(request);
-				response.getEntity().writeTo(buf);
-				
-				UploadFileResponse uploadResponse = objectMapper.readValue(buf.toString("UTF-8"), UploadFileResponse.class);
-
-				describe.putAll(BeanUtils.describe(uploadResponse));
-				
-				String downloadUrl = composeDownloadUrl(remoteAuth, uploadResponse);
-				
-				describe.put("downloadUrl", downloadUrl);
-				OUT.setHeader("downloadUrl", downloadUrl);
-				
-				Arrays.asList(response.getAllHeaders()).stream()
-				.forEach(hdr -> OUT.setHeader(hdr.getName() , hdr.getValue()));
-				
-				
-	    			log.info("Response Map:\n" + describe);
-
-	    			OUT.setBody(describe);
-
-			} catch (IOException e) {
-				exchange.getOut().setBody(e.getMessage());
-				e.printStackTrace();
-			}
-		})
-		.marshal().csv()
-		.to("file://output?fileName=url_map.csv&fileExist=append")
+		
+		.process(new UploadProcessor(serviceConfig, objectMapper))
 		.log("body: ${body}" )
+//		.to("file://output?fileName=url_map.csv&fileExist=append")
 		.end();
 
 	from("direct:listdir")
@@ -247,10 +206,6 @@ public class ZRouteBuilder extends RouteBuilder {
 
 	}
 
-	private String composeDownloadUrl(AuthResponse remoteAuth, UploadFileResponse uploadResponse) {
-		return String.format("%s/file/%s/%s", remoteAuth.getDownloadUrl(), serviceConfig.getRemoteStorageConf().getBucketName(), uploadResponse.getFileName());
-	}
-
 	private RestDefinition defineRestServer() {
 		/**
 		 * Configure local Rest server
@@ -262,21 +217,23 @@ public class ZRouteBuilder extends RouteBuilder {
 		.componentProperty("urlDecodeHeaders", "true")
 		.skipBindingOnErrorCode(false)
 		.dataFormatProperty("prettyPrint", "true")
-		.bindingMode(RestBindingMode.auto)
 		.componentProperty("chunked", "true")
 		;
 
 		return rest(serviceConfig.getContextUri()).produces("application/json")
 				// Upload a File
-		        .post("/{destDir}/upload").to("direct:rest.upload")
+		        .post("/{destDir}/upload")
 		        .bindingMode(RestBindingMode.off)
 		        .consumes("multipart/form-data").produces("application/json")
+		        .to("direct:rest.upload")
 
 		        // Update a File
 //		        .put("/mod/{filePath}").to("direct:putFile")
 
 		        // List Buckets
-		        .get("/ls").to("direct:rest.list_buckets").produces("application/json")
+		        .get("/ls")
+				.bindingMode(RestBindingMode.auto)
+				.to("direct:rest.list_buckets").produces("application/json")
 		        
 		        // List Directory
 //		        .get("/ls/{dirPath}").to("direct:rest.lsdir")
@@ -299,6 +256,7 @@ public class ZRouteBuilder extends RouteBuilder {
 		}
 		return uplReqData;
 	}
+	
 	private OnExceptionDefinition httpExceptionHandler() {
 		return onException(HttpOperationFailedException.class).onWhen(exchange -> {
 			if (exchange.isFailed()) {}
@@ -323,47 +281,62 @@ public class ZRouteBuilder extends RouteBuilder {
 		.setBody(constant("cause: ${header.cause}"));
 	}
 
-	private UploadData saveLocally(final Exchange exchange) throws UnsupportedEncodingException{
-		final Message messageIn = exchange.getIn();
+	private Processor saveLocally() {
 		
-        MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-        InputRepresentation representation =
-            new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
-        
-        String contextId = URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8").replaceAll(DIRECTORY_SEP, "/");
-        
-        String destDirBase = serviceConfig.getDocRoot() + File.separatorChar + contextId;
-        
-		UploadData uploadData = null;
-		
-        try {
-            List<FileItem> items = 
-                new RestletFileUpload( new DiskFileItemFactory()).parseRepresentation(representation);
+		return new Processor() {
 
-            if (! items.isEmpty()) {
-            	
-            		uploadData = new UploadData();
-            	
-            		for (final FileItem item : items) {
-            			if (item.isFormField()) {
-            				uploadData.putFormField(item.getFieldName(), item.getString());
-            			}
-            			else {
-            				Path destination = Paths.get(destDirBase + File.separatorChar + item.getFieldName() , item.getName());
-            				Files.createDirectories(destination.getParent());
-            				log.debug("bytes: " + item.getSize());
-    	                		Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-    	                		UserFile uf = new UserFile(destination, contextId + File.separatorChar + item.getFieldName() + File.separatorChar + destination.getFileName());
-    	                		uf.setContentType(item.getContentType());
-    	                		item.delete();
-            				uploadData.addFile(uf);
-            			}
-            		}
-            }
-        } catch (FileUploadException | IOException e) {
-            e.printStackTrace();
-        }
-        return uploadData;
+			@Override
+			public void process(Exchange exchange) {
+				
+				final Message messageIn = exchange.getIn();
+				
+				MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
+				InputRepresentation representation =
+						new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
+				
+				
+				try {
+					String contextId = null;
+					contextId = URLDecoder.decode(messageIn.getHeader("destDir", String.class), "UTF-8").replaceAll(DIRECTORY_SEP, "/");
+				
+					String destDirBase = serviceConfig.getDocRoot() + File.separatorChar + contextId;
+					
+					UploadData uploadData = null;
+				
+					List<FileItem> items = 
+							new RestletFileUpload( new DiskFileItemFactory()).parseRepresentation(representation);
+					
+					if (! items.isEmpty()) {
+						
+						uploadData = new UploadData();
+						
+						for ( FileItem item : items) {
+							if (item.isFormField()) {
+								uploadData.putFormField(item.getFieldName(), item.getString());
+							}
+							else {
+								String pathFromUser = item.getFieldName();
+								
+								Path destination = Paths.get(destDirBase + File.separatorChar + pathFromUser , item.getName());
+								Files.createDirectories(destination.getParent());
+								log.info("Received file:\n\tname: {}\n\tsize: {}", item.getName(), item.getSize());
+								Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
+								UserFile uf = new UserFile(destination, StringUtils.isBlank(item.getFieldName())
+									? contextId
+									: contextId + File.separatorChar + pathFromUser + File.separatorChar + URLEncoder.encode(destination.getFileName().toString()));
+								uf.setContentType(item.getContentType());
+								item.delete();
+								uploadData.addFile(uf);
+								exchange.getOut().setBody(uploadData);
+							}
+						}
+					}
+				} catch (FileUploadException | IOException e) {
+					e.printStackTrace();
+				}
+			}
+			
+		};
     }
 
 	

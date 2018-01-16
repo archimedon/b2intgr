@@ -3,7 +3,7 @@
 
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.rdnisn</groupId>
+  <groupId>com.rdnsn</groupId>
   <artifactId>b2intgr</artifactId>
   <packaging>jar</packaging>
   <version>0.0.1</version>

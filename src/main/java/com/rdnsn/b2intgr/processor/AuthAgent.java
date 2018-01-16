@@ -24,7 +24,7 @@ public class AuthAgent implements AggregationStrategy {
 			remoteAuthenticationUrl,
 			ImmutableMap.of("Authorization", "Basic " + basicAuthHeader)
 		);
-		log.debug("Retrieved Token: " + getRemoteAuth());
+		System.out.println("Retrieved Initial Token:\n" + getRemoteAuth());
 	}
 	
 	synchronized public AuthResponse getRemoteAuth() {
@@ -32,30 +32,11 @@ public class AuthAgent implements AggregationStrategy {
 			try {
 				auth = objectMapper.readValue(ma.doGet(), AuthResponse.class);
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
 		return auth;
 	}
-	
-//	
-//	 public GetUploadUrlResponse getUploadUrl() {
-//			final MultipartAgent getupl = new MultipartAgent(
-//					remoteAuthenticationUrl,
-//					ImmutableMap.of("Authorization", "Basic " + basicAuthHeader)
-//				);
-//
-//		if (auth == null) {
-//			try {
-//				auth = objectMapper.readValue(ma.doGet(), AuthResponse.class);
-//			} catch (IOException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-//		}
-//		return auth;
-//	}
 	
 	public Exchange aggregate(Exchange original, Exchange resource) {
 		if (original == null) {
@@ -69,19 +50,4 @@ public class AuthAgent implements AggregationStrategy {
 	    }
 	    return original;
 	}
-
-	//	
-//	{
-//	    "bucketId" : "4a48fe8875c6214145260818",
-//	    "uploadUrl" : "https://pod-000-1005-03.backblaze.com/b2api/v1/b2_upload_file?cvt=c001_v0001005_t0027&bucket=4a48fe8875c6214145260818",
-//	    "authorizationToken" : "2_20151009170037_f504a0f39a0f4e657337e624_9754dde94359bd7b8f1445c8f4cc1a231a33f714_upld"
-//	}
-//
-//	public void process(Exchange exchange) throws Exception {
-//		
-//		exchange.getIn().setHeader("remoteAuth", getRemoteAuth());
-//	    if (exchange.getPattern().isOutCapable()) {
-//	    		exchange.getOut().setHeader("remoteAuth", auth);
-//	    }
-//	}
 }

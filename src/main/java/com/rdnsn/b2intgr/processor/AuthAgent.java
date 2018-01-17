@@ -45,6 +45,9 @@ public class AuthAgent implements AggregationStrategy {
         }
 		auth = resource.getIn().getBody(AuthResponse.class);
 		original.getIn().setHeader("remoteAuth", auth);
+		original.getIn().setHeader("Authorization", auth.getAuthorizationToken());
+		original.getIn().setHeader("downloadUrlBase", auth.getDownloadUrl());
+		
 	    if (original.getPattern().isOutCapable()) {
 	        original.getOut().setHeader("remoteAuth", auth);
 	    }

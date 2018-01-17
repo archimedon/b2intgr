@@ -59,7 +59,7 @@ public class UploadProcessor implements Processor {
     }
     
 	@Override
-	public void process(Exchange exchange) {
+	public void process(Exchange exchange) throws Exception {
 		final Message IN = exchange.getIn();
 		
 		UserFile userFile = IN.getHeader("userFile", UserFile.class);
@@ -75,32 +75,46 @@ public class UploadProcessor implements Processor {
 		
 		log.debug("Content-Length: {}", file.length());
 //		InputStream fin = new FileInputStream(file);
-	    
-		Message responseOut = exchange.getContext().createProducerTemplate()
-		.send(getHttp4Proto(uploadAuth.getUploadUrl()), innerExchg -> {
-			final Message httpPost = innerExchg.getIn();
-			httpPost.setBody(file);
-			httpPost.setHeader("Authorization", uploadAuth.getAuthorizationToken());
-			httpPost.setHeader("Content-Type", userFile.getContentType());
-			httpPost.setHeader("X-Bz-Content-Sha1", "do_not_verify");
-			httpPost.setHeader("X-Bz-File-Name", remoteFilen);
-			httpPost.setHeader("X-Bz-Info-Author", "unknown");
-			httpPost.setHeader("Content-Length", file.length() + "");
-		}).getOut();
-		
-		try {
-			UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
-			exchange.getOut().copyFromWithNewBody(responseOut, null);
-			exchange.getOut().setHeader("userFile", userFile);
+//		try {
 			
-			String downloadUrl = remoteAuth.getDownloadUrl();
-			String url = String.format("%s/file/%s/%s", downloadUrl, serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
-			System.err.println(url);
-			exchange.getOut().setHeader("downloadUrl", url);
-			exchange.getOut().setBody(BeanUtils.describe(uploadResponse));
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+			Message responseOut = exchange.getContext().createProducerTemplate()
+					.send(getHttp4Proto(uploadAuth.getUploadUrl()), innerExchg -> {
+						final Message httpPost = innerExchg.getIn();
+						httpPost.setBody(file);
+						httpPost.setHeader("Authorization", uploadAuth.getAuthorizationToken());
+						httpPost.setHeader("Content-Type", userFile.getContentType());
+						httpPost.setHeader("X-Bz-Content-Sha1", "do_not_verify");
+						httpPost.setHeader("X-Bz-File-Name", remoteFilen);
+						httpPost.setHeader("X-Bz-Info-Author", "unknown");
+						httpPost.setHeader("Content-Length", file.length() + "");
+					}).getOut();
+		
+			System.err.println("headers: " + responseOut.getHeaders());
+			Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+			if ((code != null && code == 200)) {
+				
+				exchange.getOut().copyFromWithNewBody(responseOut, null);
+				exchange.getOut().setHeader("userFile", userFile);
+				
+				String downloadUrl = remoteAuth.getDownloadUrl();
+				String url = String.format("%s/file/%s/%s", downloadUrl, serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
+				System.err.println(url);
+				exchange.getOut().setHeader("downloadUrl", url);
+				UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
+
+				exchange.getOut().setBody(BeanUtils.describe(uploadResponse));
+			}
+			else {
+				UploadException t = new UploadException("response code not OK. File '" + remoteFilen +"' not yet uploaded" );
+				exchange.setException(t);
+				exchange.getOut().setBody(IN.getHeaders());
+				throw t;
+			}
+//		} catch (java.lang.NullPointerException npe) {
+//			throw new UploadException();
+//		} catch (Exception e) {
+//			throw new UploadException(e);
+//		}
 
 	}
 

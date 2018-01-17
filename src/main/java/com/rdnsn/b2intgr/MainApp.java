@@ -7,13 +7,16 @@ import java.util.Date;
 
 import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
+import org.apache.camel.Exchange;
 import org.apache.camel.impl.DefaultCamelContext;
+import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.util.jndi.JndiContext;
 import org.apache.commons.lang.StringUtils;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rdnsn.b2intgr.api.AuthResponse;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
 
@@ -68,6 +71,17 @@ public class MainApp {
 			, this.objectMapper );
 
 		jndiContext.bind("authAgent", authAgent);
+		jndiContext.bind("makeRes", new AggregationStrategy() {
+			@Override
+			public Exchange aggregate(Exchange original, Exchange resource) {
+				if (resource != null) {
+					original.getOut().copyFrom(resource.getIn());
+//					original.getIn().setBody(resource.getIn().getBody());
+//					original.getIn().setBody(resource.getIn().getBody());
+				}
+				return original;
+			}
+		});
 	    	CamelContext camelContext = new DefaultCamelContext(jndiContext);
     		camelContext.addComponent("activemq", ActiveMQComponent.activeMQComponent("vm://localhost?broker.persistent=false"));
     		try {

@@ -16,8 +16,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Formatter;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -27,6 +30,7 @@ import org.apache.camel.Expression;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.http4.HttpMethods;
 import org.apache.camel.http.common.HttpOperationFailedException;
 import org.apache.camel.model.OnExceptionDefinition;
 import org.apache.camel.model.rest.RestBindingMode;
@@ -36,6 +40,7 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
@@ -59,6 +64,7 @@ import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
 import com.rdnsn.b2intgr.api.UploadFileResponse;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.processor.CloudFSProcessor;
+import com.rdnsn.b2intgr.processor.UploadException;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
 
 /**
@@ -93,23 +99,32 @@ public class ZRouteBuilder extends RouteBuilder {
 	 * Routes ...
 	 */
 	public void configure() {
+		onException(org.apache.camel.http.common.HttpOperationFailedException.class)
+	    .maximumRedeliveries(2).redeliveryDelay(5);
+		
+//		errorHandler(defaultErrorHandler().maximumRedeliveries(3));
+		
+//		uploadExceptionHandler();
+//		generalExceptionHandler();
 
-		httpExceptionHandler();
-		generalExceptionHandler();
 		defineRestServer();
 
-	// Replies -> List of buckets
-	from("direct:rest.list_buckets")
+		// Authenticate
+		from("direct:auth")
 		.enrich("bean:authAgent?method=getRemoteAuth", authAgent)
+		.end();
+		
+		// Replies -> List of buckets
+		from("direct:rest.list_buckets")
+		.to("direct:auth")
 		.to("direct:listdir")
-	.end();
+		.end();
 	
-	// Replies -> HREF to resource
-	from("direct:rest.upload")
-		.process(saveLocally())
-		.wireTap("direct:b2upload")
+		// Replies -> HREF to resource
+		from("direct:rest.upload")
+		.process(saveLocally()).wireTap("direct:b2upload")
 		.to("direct:uploadreply")
-	.end();
+		.end();
 
 	from("direct:uploadreply")
 		.process(new Processor() {
@@ -129,8 +144,9 @@ public class ZRouteBuilder extends RouteBuilder {
 		});
 	
 	from("direct:b2upload")
-	.delay(1000)
-	.asyncDelayed()
+	.to("direct:auth")
+//	.delay(1000)
+//	.asyncDelayed()
 		.split(new Expression()  {
 	        @Override
 	        @SuppressWarnings("unchecked")
@@ -141,40 +157,93 @@ public class ZRouteBuilder extends RouteBuilder {
 		 })
 //		.delay(1000)
 //		.asyncDelayed()
-		.throttle(1)
 		.process(ex -> { UserFile uf = ex.getIn().getBody(UserFile.class);
 			ex.getIn().setBody(null);
 			ex.getIn().setHeader("userFile", uf);
 		})
-		.enrich("bean:authAgent?method=getRemoteAuth", authAgent)
-		.setHeader("Authorization", simple(authAgent.getRemoteAuth().getAuthorizationToken()))
-		
+		.to("direct:b2send")
+		.end();
+
+		from("direct:b2send")
+//		.throttle(1)
+		.errorHandler(noErrorHandler())
+
 		// Prepare Exchange for http-post to Backblaze - `upload_file` operation
 		.setHeader(Exchange.HTTP_METHOD, constant("POST"))
 		// 
 		.setBody(simple(makeUploadReqData()))
 		.enrich(getHttp4Proto(authAgent.getRemoteAuth().resolveGetUploadUrl()), (original, resource) -> {
-			GetUploadUrlResponse uploadAuth = null;
 			try {
-//				UserFile uf = original.getIn().getHeader("userFile", UserFile.class);
-//				uf.getFilepath().toFile();
-				uploadAuth = objectMapper.readValue(resource.getIn().getBody(String.class), GetUploadUrlResponse.class);
-//				original.getIn().setBody(uploadAuth);
-				original.getIn().setHeader("uploadAuth", uploadAuth);
-//				original.getIn().setHeader(Exchange.HTTP_URI, getHttp4Proto(uploadAuth.getUploadUrl()));
+				final Message IN = original.getIn();
+				final GetUploadUrlResponse uploadAuth = objectMapper.readValue(resource.getIn().getBody(String.class), GetUploadUrlResponse.class);
+
+				final UserFile userFile = IN.getHeader("userFile", UserFile.class);
+
+				final File file = userFile.getFilepath().toFile();
+				final String remoteFilen = userFile.getName();
 				
+				log.debug("File-Name: {}", remoteFilen);
+				log.debug("Content-Type: {}", userFile.getContentType());
+				log.debug("Content-Length: {}", file.length());
+				
+				String authdUploadUrl = getHttp4Proto(uploadAuth.getUploadUrl());
+//				String authdUploadUrl = getHttp4Proto("https://www.google.com");
+				log.debug("uploadAuth: {}", authdUploadUrl);
+				
+				IN.setHeader("uploadAuth", uploadAuth);
+//				IN.setHeader("uploadAuthToken", uploadAuth.getAuthorizationToken());
+				IN.setHeader("authdUploadUrl", authdUploadUrl);
+//				IN.setHeader(Exchange.HTTP_URI, uploadAuth.getUploadUrl().replaceFirst("https:", ""));
+				IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+//				IN.setHeader(Exchange.CONTENT_ENCODING, "gzip" );
+				IN.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
+				IN.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
+				IN.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
+//				IN.setHeader(HttpHeaders.ACCEPT_ENCODING, "gzip, deflate");       
+//		          IN.setHeader(Exchange.HTTP_CHARACTER_ENCODING, "iso-8859-1");
+				IN.setHeader("X-Bz-Content-Sha1", "do_not_verify");
+				IN.setHeader("X-Bz-Content-Sha1", sha1(file));
+				IN.setHeader("X-Bz-File-Name", remoteFilen);
+				IN.setHeader("X-Bz-Info-Author", "unknown");
+				IN.setBody(file);
+
 			} catch (IOException e) {
 			    if (original.getPattern().isOutCapable()) {
 			        original.getOut().setBody(e);
 			    }
 			}
-			log.info("Upload URL Response: " + uploadAuth);
 			return original;
 		})
 		.log("\n\nafter GetUploadUrl:\n${headers}\n\n")
-		
-		.process(new UploadProcessor(serviceConfig, objectMapper))
-		.log("body: ${body}" )
+		.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST)
+		.toD("${header.authdUploadUrl}")
+//		.pollEnrich(header("authdUploadUrl"), -1, "makeRes", false)
+//		.enrich("https4:" + simple(Exchange.HTTP_URI), (original, resource) -> {
+//			if (resource != null) {
+//				original.getOut().copyFrom(resource.getIn());
+//			}
+//			return original;
+//		})
+		.process(exchange -> {
+			System.err.println("headers: " + exchange.getIn().getHeaders());
+			Integer code = exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+			String body = exchange.getIn().getBody(String.class);
+			System.err.println("body: " + body);
+			if (code != null) {
+				System.err.println("code: " + code);
+				UploadFileResponse uploadResponse = objectMapper.readValue(body, UploadFileResponse.class);
+
+				exchange.getOut().copyFromWithNewBody(exchange.getIn(), uploadResponse);
+
+				String downloadUrlBase = exchange.getIn().getHeader("downloadUrlBase", String.class);
+				String remoteFilen = exchange.getIn().getHeader("X-Bz-File-Name", String.class);
+
+				String downloadUrl = String.format("%s/file/%s/%s", downloadUrlBase, serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
+				System.err.println(downloadUrl);
+				exchange.getOut().setHeader("downloadUrl", downloadUrl);
+			}
+
+		})
 //		.to("file://output?fileName=url_map.csv&fileExist=append")
 		.end();
 
@@ -257,18 +326,35 @@ public class ZRouteBuilder extends RouteBuilder {
 		return uplReqData;
 	}
 	
-	private OnExceptionDefinition httpExceptionHandler() {
-		return onException(HttpOperationFailedException.class).onWhen(exchange -> {
-			if (exchange.isFailed()) {}
-			exchange.getOut().setHeader("cause", exchange.getException().getMessage());
-			HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
-			return exe.getStatusCode() > 204;
+//	private OnExceptionDefinition httpExceptionHandler() {
+//		return onException(HttpOperationFailedException.class).onWhen(exchange -> {
+//			exchange.getOut().setHeader("cause", exchange.getException().getMessage());
+//			HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
+//			return exe.getStatusCode() > 204;
+//		})
+//		.log("HTTP exception handled")
+//		.handled(true)
+////		.continued(true) .onException(java.lang.NullPointerException.class).redeliveryDelay(2000)
+//		.setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
+//	}
+	
+	private OnExceptionDefinition uploadExceptionHandler() {
+		return onException(Exception.class).process(exchange ->  {
+			if (exchange.isFailed()) {
+				System.err.println("exchange.getFromRouteId() " + exchange.getFromRouteId());
+				System.err.println("exchange.getException() " + exchange.getException());
+				System.err.println("exchange.getIn().getHeaders() " + exchange.getIn().getHeaders());
+			}
+			
+			exchange.getOut().setHeader("cause", exchange.getException());
+			exchange.getOut().setBody(exchange.getIn().getBody());
+			log.debug("except: " , exchange.getException()); //	HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
 		})
-		.log("HTTP exception handled")
-		.handled(true)
-//		.continued(true)
-		.setBody(constant("There will be HttpOperationFailedException blood because..:\n${header.cause}"));
+				.log("Not handled")
+				.handled(false) //	.continued(true)
+				.setBody(constant("cause: ${header.cause}"));
 	}
+	
 
 	private OnExceptionDefinition generalExceptionHandler() {
 		return onException(Exception.class).process(exchange ->  {
@@ -279,6 +365,31 @@ public class ZRouteBuilder extends RouteBuilder {
 		.log("Not handled")
 		.handled(false) //	.continued(true)
 		.setBody(constant("cause: ${header.cause}"));
+	}
+
+	public static String sha1(final File file) {
+		String ans = null;
+		try {
+			final MessageDigest messageDigest = MessageDigest.getInstance("SHA1");
+
+			InputStream is = new BufferedInputStream(new FileInputStream(file));
+			final byte[] buffer = new byte[1024];
+			for (int read = 0; (read = is.read(buffer)) != -1;) {
+				messageDigest.update(buffer, 0, read);
+			}
+
+			// Convert the byte to hex format
+			try (Formatter formatter = new Formatter()) {
+				for (final byte b : messageDigest.digest()) {
+					formatter.format("%02x", b);
+				}
+				ans = formatter.toString();
+			}
+		} catch (IOException | NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
+
+		return ans;
 	}
 
 	private Processor saveLocally() {

@@ -20,6 +20,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +73,8 @@ import com.rdnsn.b2intgr.processor.UploadProcessor;
  */
 public class ZRouteBuilder extends RouteBuilder {
 	
+	private static int cnt = 0;
+
 	private Logger log = LoggerFactory.getLogger(getClass());
 
 	protected final String DIRECTORY_SEP;
@@ -99,9 +102,17 @@ public class ZRouteBuilder extends RouteBuilder {
 	 * Routes ...
 	 */
 	public void configure() {
-		onException(org.apache.camel.http.common.HttpOperationFailedException.class)
-	    .maximumRedeliveries(2).redeliveryDelay(5);
 		
+//		onException(org.apache.camel.http.common.HttpOperationFailedException.class)
+//	    .maximumRedeliveries(serviceConfig.getMaximumRedeliveries()).redeliveryDelay(serviceConfig.getRedeliveryDelay())
+//	    .to("direct:wrapupload");
+
+		onException(Exception.class).to("direct:wrapupload")
+		.maximumRedeliveries(4).redeliveryDelay(2000)
+//		.asyncDelayedRedelivery()
+		;
+		
+
 //		errorHandler(defaultErrorHandler().maximumRedeliveries(3));
 		
 //		uploadExceptionHandler();
@@ -161,18 +172,30 @@ public class ZRouteBuilder extends RouteBuilder {
 			ex.getIn().setBody(null);
 			ex.getIn().setHeader("userFile", uf);
 		})
-		.to("direct:b2send")
+		.to("direct:wrapupload")
 		.end();
 
-		from("direct:b2send")
-//		.throttle(1)
+	from("direct:wrapupload")
+	.errorHandler(noErrorHandler())
+
+	.log("Called")
+//    .doTry()
+		.to("direct:getUploadUrl")
+		.to("direct:b2send")
+//	.doCatch(UploadException.class)
+//		.to("direct:wrapupload")
+	.end();
+
+		from("direct:getUploadUrl")
 		.errorHandler(noErrorHandler())
+
+//		.throttle(1)
 
 		// Prepare Exchange for http-post to Backblaze - `upload_file` operation
 		.setHeader(Exchange.HTTP_METHOD, constant("POST"))
 		// 
 		.setBody(simple(makeUploadReqData()))
-		.enrich(getHttp4Proto(authAgent.getRemoteAuth().resolveGetUploadUrl()), (original, resource) -> {
+		.enrich(getHttp4Proto(authAgent.getRemoteAuth().resolveGetUploadUrl() ), (original, resource) -> {
 			try {
 				final Message IN = original.getIn();
 				final GetUploadUrlResponse uploadAuth = objectMapper.readValue(resource.getIn().getBody(String.class), GetUploadUrlResponse.class);
@@ -215,21 +238,23 @@ public class ZRouteBuilder extends RouteBuilder {
 			return original;
 		})
 		.log("\n\nafter GetUploadUrl:\n${headers}\n\n")
+		.end();
+		
+		
+		from("direct:b2send")
+		.errorHandler(noErrorHandler())
+
 		.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST)
-		.toD("${header.authdUploadUrl}")
-//		.pollEnrich(header("authdUploadUrl"), -1, "makeRes", false)
-//		.enrich("https4:" + simple(Exchange.HTTP_URI), (original, resource) -> {
-//			if (resource != null) {
-//				original.getOut().copyFrom(resource.getIn());
-//			}
-//			return original;
-//		})
+		.toD("${header.authdUploadUrl}" + "?okStatusCodeRange=100-999")
 		.process(exchange -> {
-			System.err.println("headers: " + exchange.getIn().getHeaders());
+//			System.err.println("headers: " + exchange.getIn().getHeaders());
 			Integer code = exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 			String body = exchange.getIn().getBody(String.class);
 			System.err.println("body: " + body);
 			if (code != null) {
+				if (code != 200) {
+					throw new UploadException("bad request "  + exchange.getIn().getHeaders());
+				}
 				System.err.println("code: " + code);
 				UploadFileResponse uploadResponse = objectMapper.readValue(body, UploadFileResponse.class);
 
@@ -241,6 +266,9 @@ public class ZRouteBuilder extends RouteBuilder {
 				String downloadUrl = String.format("%s/file/%s/%s", downloadUrlBase, serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
 				System.err.println(downloadUrl);
 				exchange.getOut().setHeader("downloadUrl", downloadUrl);
+			}
+			else {
+					throw new UploadException("bad request "  + exchange.getIn().getHeaders());
 			}
 
 		})
@@ -383,7 +411,7 @@ public class ZRouteBuilder extends RouteBuilder {
 				for (final byte b : messageDigest.digest()) {
 					formatter.format("%02x", b);
 				}
-				ans = formatter.toString();
+				ans = formatter.toString(); // + ((new Date()).getTime() % 2 == 0 ? "e" : "")
 			}
 		} catch (IOException | NoSuchAlgorithmException e) {
 			e.printStackTrace();

@@ -45,6 +45,42 @@ public class CloudFSConfiguration {
 	@JsonProperty
 	private String customSeparator = "\\^";
 	
+	@NotNull
+	@JsonProperty
+	private String adminEmail = "ronniedz@gmail.com";
+
+	@NotNull
+	@JsonProperty
+	private int maximumRedeliveries = 4;
+	
+	@NotNull
+	@JsonProperty
+	private int redeliveryDelay = 5; // Seconds
+	
+	public String getAdminEmail() {
+		return adminEmail;
+	}
+
+	public void setAdminEmail(String adminEmail) {
+		this.adminEmail = adminEmail;
+	}
+
+	public int getMaximumRedeliveries() {
+		return maximumRedeliveries;
+	}
+
+	public void setMaximumRedeliveries(int maximumRedeliveries) {
+		this.maximumRedeliveries = maximumRedeliveries;
+	}
+
+	public int getRedeliveryDelay() {
+		return redeliveryDelay;
+	}
+
+	public void setRedeliveryDelay(int redeliveryDelay) {
+		this.redeliveryDelay = redeliveryDelay;
+	}
+
 	public String getProtocol() {
 		return protocol;
 	}

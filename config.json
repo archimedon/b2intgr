@@ -5,6 +5,9 @@
 	"docRoot": "/tmp/b2intgr",
 	"protocol": "http",
 	"customSeparator": "\\^", 
+	"adminEmail" : "ronniedz@gmail.com",
+	"maximumRedeliveries" : 4,
+	"redeliveryDelay" : 3000,
 	"remoteStorageConf" : {
 		"bucket" : {
 			"name" : "b2public",

@@ -105,9 +105,22 @@ public class ZRouteBuilder extends RouteBuilder {
 	 */
 	public void configure() {
 
-//		errorHandler(deadLetterChannel("direct:mailadmin").redeliveryDelay(1000).logStackTrace(false));
-		 onException(Exception.class)
-     .maximumRedeliveries(3).redeliveryDelay(0);
+//		errorHandler(noErrorHandler());
+	errorHandler(deadLetterChannel("direct:end").redeliveryDelay(1000).onRedelivery(ex -> {
+		System.err.println("deadLetterChannel: " + ex.getIn().getHeaders());
+		System.err.println("deadLetterChannel: " + ex.getOut().getHeaders());
+	}).logStackTrace(true));
+		 onException(UploadException.class)
+     .maximumRedeliveries(3).redeliveryDelay(3000)
+//     .to("direct:wrapupload")
+     .process(exchange -> {
+    	 	exchange.getIn().setHeader("cnt", "TRUE");
+    	 	exchange.getOut().setHeader("cnt", "TRUE");
+    	 	
+     }).logStackTrace(false);
+
+//		 .onException(UploadException.class).redeliverDelay(3000).to("direct:wrapupload").end()
+
 		// route specific on exception for MyFunctionalException
 		// we MUST use .end() to indicate that this sub block is ended
 
@@ -181,24 +194,26 @@ public class ZRouteBuilder extends RouteBuilder {
 				UserFile uf = ex.getIn().getBody(UserFile.class);
 				ex.getIn().setBody(null);
 				ex.getIn().setHeader("userFile", uf);
-			})
+			}).multicast()
 			.to("direct:wrapupload")
 			.end();
 
 		from("direct:wrapupload")
+//		.onException( Exception.class).redeliverDelay(3000).end()
+		.errorHandler(noErrorHandler())
 			.log("Calling foo route redelivery count: ${header.CamelRedeliveryCounter}")
 			.to("direct:getUploadUrl", "direct:b2send")
 			.end();
 
 		from("direct:getUploadUrl")
-			.errorHandler(noErrorHandler())
+//			.errorHandler(noErrorHandler())
 
 			// .throttle(1)
 
 			// Prepare Exchange for http-post to Backblaze - `upload_file` operation
 			.setHeader(Exchange.HTTP_METHOD, constant("POST"))
-			//
 			.setBody(simple(makeUploadReqData()))
+			
 			.enrich(getHttp4Proto(authAgent.getRemoteAuth().resolveGetUploadUrl()), (original, resource) -> {
 				try {
 					final Message IN = original.getIn();
@@ -214,13 +229,14 @@ public class ZRouteBuilder extends RouteBuilder {
 					log.debug("Content-Type: {}", userFile.getContentType());
 					log.debug("Content-Length: {}", file.length());
 
-					String authdUploadUrl = getHttp4Proto(uploadAuth.getUploadUrl());
+					String authdUploadUrl = uploadAuth.getUploadUrl();
 					// String authdUploadUrl = getHttp4Proto("https://www.google.com");
 					log.debug("uploadAuth: {}", authdUploadUrl);
 
 					IN.setHeader("uploadAuth", uploadAuth);
 					// IN.setHeader("uploadAuthToken", uploadAuth.getAuthorizationToken());
 					IN.setHeader("authdUploadUrl", authdUploadUrl);
+					// IN.setHeader(Exchange.HTTP_URI,
 					// IN.setHeader(Exchange.HTTP_URI,
 					// uploadAuth.getUploadUrl().replaceFirst("https:", ""));
 					IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
@@ -247,42 +263,45 @@ public class ZRouteBuilder extends RouteBuilder {
 				}
 				return original;
 			})
-			.log("\n\nafter GetUploadUrl:\n${headers}\n\n")
+		  .log("\n\nafter GetUploadUrl:\n${headers}\n\n")
 			.end();
 
 		from("direct:b2send")
-		.errorHandler(noErrorHandler())
+//		.errorHandler(noErrorHandler())
 
-			.onException(UploadException.class).handled(true).redeliverDelay(3000).to("direct:wrapupload").end()
+//			.onException(UploadException.class).redeliverDelay(3000).to("direct:wrapupload").end()
 			.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST)
-//			.toD("${header.authdUploadUrl}")
-			.toD("${header.authdUploadUrl}" + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true"
-					+ "&disableStreamCache=false&transferException=false")
-			.process(exchange -> {
-				// System.err.println("headers: " + exchange.getIn().getHeaders());
-				Integer code = exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-				String body = exchange.getIn().getBody(String.class);
-				System.err.println("body: " + body);
-				if (code != null) {
-					if (code != 200) {
-						throw new UploadException("bad request " + exchange.getIn().getHeaders());
-					}
-					System.err.println("code: " + code);
-					UploadFileResponse uploadResponse = objectMapper.readValue(body, UploadFileResponse.class);
-					
-					exchange.getOut().copyFromWithNewBody(exchange.getIn(), uploadResponse);
-					
-					String downloadUrlBase = exchange.getIn().getHeader("downloadUrlBase", String.class);
-					String remoteFilen = exchange.getIn().getHeader("X-Bz-File-Name", String.class);
-					
-					String downloadUrl = String.format("%s/file/%s/%s", downloadUrlBase,
-							serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
-					System.err.println(downloadUrl);
-					exchange.getOut().setHeader("downloadUrl", downloadUrl);
-				} else {
-					throw new UploadException("bad request " + exchange.getIn().getHeaders());
-				}
-			})
+			
+		  .process(new UploadProcessor(serviceConfig, objectMapper))
+
+//			.toD("${header.authdUploadUrl}" + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true"
+//					+ "&disableStreamCache=false&transferException=false")
+
+//	.process(exchange -> {
+//				// System.err.println("headers: " + exchange.getIn().getHeaders());
+//				Integer code = exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+//				String body = exchange.getIn().getBody(String.class);
+//				System.err.println("body: " + body);
+//				if (code != null) {
+//					if (code != 200) {
+//						throw new UploadException("bad request " + exchange.getIn().getHeaders());
+//					}
+//					System.err.println("code: " + code);
+//					UploadFileResponse uploadResponse = objectMapper.readValue(body, UploadFileResponse.class);
+//					
+//					exchange.getOut().copyFromWithNewBody(exchange.getIn(), uploadResponse);
+//					
+//					String downloadUrlBase = exchange.getIn().getHeader("downloadUrlBase", String.class);
+//					String remoteFilen = exchange.getIn().getHeader("X-Bz-File-Name", String.class);
+//					
+//					String downloadUrl = String.format("%s/file/%s/%s", downloadUrlBase,
+//							serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
+//					System.err.println(downloadUrl);
+//					exchange.getOut().setHeader("downloadUrl", downloadUrl);
+//				} else {
+//					throw new UploadException("bad request " + exchange.getIn().getHeaders());
+//				}
+//			})
 			// .to("file://output?fileName=url_map.csv&fileExist=append")
 			.end();
 

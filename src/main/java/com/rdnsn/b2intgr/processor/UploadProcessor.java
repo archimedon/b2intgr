@@ -6,11 +6,13 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
+import org.apache.camel.component.http4.HttpMethods;
 import org.apache.commons.beanutils.BeanUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -29,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.net.HttpHeaders;
 import com.rdnsn.b2intgr.CloudFSConfiguration;
@@ -47,74 +50,67 @@ import java.net.URL;
 
 
 public class UploadProcessor implements Processor {
-	
-    protected static final Logger log = LoggerFactory.getLogger(UploadProcessor.class);
+
+	protected static final Logger log = LoggerFactory.getLogger(UploadProcessor.class);
 	private static final String UTF_8 = StandardCharsets.UTF_8.toString();
-    private final ObjectMapper objectMapper;
+	private final ObjectMapper objectMapper;
 	private final CloudFSConfiguration serviceConfig;
     
-    public UploadProcessor(CloudFSConfiguration serviceConfig, ObjectMapper objectMapper) {
-    		this.objectMapper = objectMapper;
-    		this.serviceConfig = serviceConfig;
-    }
+	public UploadProcessor(CloudFSConfiguration serviceConfig, ObjectMapper objectMapper) {
+		this.objectMapper = objectMapper;
+		this.serviceConfig = serviceConfig;
+	}
     
 	@Override
-	public void process(Exchange exchange) throws Exception {
+	public void process(Exchange exchange) throws UploadException {
 		final Message IN = exchange.getIn();
 		
 		UserFile userFile = IN.getHeader("userFile", UserFile.class);
-		GetUploadUrlResponse uploadAuth = IN.getHeader("uploadAuth", GetUploadUrlResponse.class);
-		AuthResponse remoteAuth = IN.getHeader("remoteAuth", AuthResponse.class);
+//		GetUploadUrlResponse uploadAuth = IN.getHeader("uploadAuth", GetUploadUrlResponse.class);
+//		AuthResponse remoteAuth = IN.getHeader("remoteAuth", AuthResponse.class);
 
-		final File file = userFile.getFilepath().toFile();
+		String downloadUrlBase = exchange.getIn().getHeader("downloadUrlBase", String.class);
+		String remoteFilen = exchange.getIn().getHeader("X-Bz-File-Name", String.class);
 		
-		final String remoteFilen = userFile.getName();
+		String downloadUrl = String.format("%s/file/%s/%s", downloadUrlBase,
+				serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
 		
-		log.debug("File-Name: {}", remoteFilen);
-		log.debug("Content-Type: {}", userFile.getContentType());
-		
-		log.debug("Content-Length: {}", file.length());
-//		InputStream fin = new FileInputStream(file);
-//		try {
+		exchange.getOut().setHeader("downloadUrl", downloadUrl);
 			
 			Message responseOut = exchange.getContext().createProducerTemplate()
-					.send(getHttp4Proto(uploadAuth.getUploadUrl()), innerExchg -> {
-						final Message httpPost = innerExchg.getIn();
-						httpPost.setBody(file);
-						httpPost.setHeader("Authorization", uploadAuth.getAuthorizationToken());
-						httpPost.setHeader("Content-Type", userFile.getContentType());
-						httpPost.setHeader("X-Bz-Content-Sha1", "do_not_verify");
-						httpPost.setHeader("X-Bz-File-Name", remoteFilen);
-						httpPost.setHeader("X-Bz-Info-Author", "unknown");
-						httpPost.setHeader("Content-Length", file.length() + "");
-					}).getOut();
+				.send(getHttp4Proto(IN.getHeader("authdUploadUrl", String.class)
+						+ "?okStatusCodeRange=100-999"), innerExchg -> {
+				innerExchg.getIn().copyFrom(IN);
+				System.err.println("authdUploadUrl: " + innerExchg.getIn().getHeader("authdUploadUrl"));
+				
+				innerExchg.getIn().removeHeader("authdUploadUrl");
+				innerExchg.getIn().removeHeader("remoteAuth");
+				innerExchg.getIn().removeHeader("uploadAuth");
+				innerExchg.getIn().removeHeader("userFile");
+				
+				System.err.println("Exchange.HTTP_METHOD: " + innerExchg.getIn().getHeader(Exchange.HTTP_METHOD));
+				System.err.println("Exchange.CONTENT_LENGTH: " + innerExchg.getIn().getHeader(Exchange.CONTENT_LENGTH));
+				
+			}).getOut();
 		
-			System.err.println("headers: " + responseOut.getHeaders());
+			
+			System.err.println("responseOut.getHeaders: " + responseOut.getHeaders());
+			
 			Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-			if ((code != null && code == 200)) {
+			System.err.println("HTTP_RESPONSE_CODE: " + code);
+			if (code != null && code == 200) {
 				
-				exchange.getOut().copyFromWithNewBody(responseOut, null);
-				exchange.getOut().setHeader("userFile", userFile);
-				
-				String downloadUrl = remoteAuth.getDownloadUrl();
-				String url = String.format("%s/file/%s/%s", downloadUrl, serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
-				System.err.println(url);
-				exchange.getOut().setHeader("downloadUrl", url);
-				UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
-
-				exchange.getOut().setBody(BeanUtils.describe(uploadResponse));
+				try {
+					UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
+					exchange.getOut().copyFromWithNewBody(responseOut, ImmutableList.of(BeanUtils.describe(uploadResponse)));
+//					exchange.getOut().setHeader("userFile", userFile);
+				} catch (IOException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+					throw new UploadException(e);
+				}
 			}
 			else {
-				UploadException t = new UploadException("response code not OK. File '" + remoteFilen +"' not yet uploaded" );
-				exchange.setException(t);
-				exchange.getOut().setBody(IN.getHeaders());
-				throw t;
+				throw new UploadException("Response code not OK (" + code + ") File '" + remoteFilen +"' not uploaded" );
 			}
-//		} catch (java.lang.NullPointerException npe) {
-//			throw new UploadException();
-//		} catch (Exception e) {
-//			throw new UploadException(e);
-//		}
 
 	}
 

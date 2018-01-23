@@ -107,8 +107,9 @@ public class ZRouteBuilder extends RouteBuilder {
 
 //		errorHandler(noErrorHandler());
 	errorHandler(deadLetterChannel("direct:end").redeliveryDelay(1000).onRedelivery(ex -> {
+		ex.getIn().setHeader(Exchange.DESTINATION_OVERRIDE_URL, "direct:wrapupload");
 		System.err.println("deadLetterChannel: " + ex.getIn().getHeaders());
-		System.err.println("deadLetterChannel: " + ex.getOut().getHeaders());
+//		System.err.println("deadLetterChannel: " + ex.getOut().getHeaders());
 	}).logStackTrace(true));
 		 onException(UploadException.class)
      .maximumRedeliveries(3).redeliveryDelay(3000)
@@ -176,7 +177,7 @@ public class ZRouteBuilder extends RouteBuilder {
 				}
 		});
 
-		from("direct:b2upload")
+		from("direct:b2upload").routeId("upload_facade")
 			.to("direct:auth")
 			// .delay(1000)
 			// .asyncDelayed()
@@ -190,22 +191,29 @@ public class ZRouteBuilder extends RouteBuilder {
 			})
 			// .delay(1000)
 			// .asyncDelayed()
-			.process(ex -> {
-				UserFile uf = ex.getIn().getBody(UserFile.class);
-				ex.getIn().setBody(null);
-				ex.getIn().setHeader("userFile", uf);
-			}).multicast()
+			.process(exchange -> {
+				UserFile uf = exchange.getIn().getBody(UserFile.class);
+				exchange.getIn().setBody(null);
+				exchange.getIn().setHeader("userFile", uf);
+			})
 			.to("direct:wrapupload")
 			.end();
 
-		from("direct:wrapupload")
+		from("direct:wrapupload").routeId("atomicupload")
+//		.errorHandler(noErrorHandler())
+		
 //		.onException( Exception.class).redeliverDelay(3000).end()
-		.errorHandler(noErrorHandler())
 			.log("Calling foo route redelivery count: ${header.CamelRedeliveryCounter}")
-			.to("direct:getUploadUrl", "direct:b2send")
+			.to("direct:sub")
 			.end();
 
-		from("direct:getUploadUrl")
+		from("direct:sub")
+		.errorHandler(noErrorHandler())
+		.threads(3, 8)
+		.to("direct:getUploadUrl", "direct:b2send")
+		.end();
+		
+		from("direct:getUploadUrl").routeId("authupload_comp")
 //			.errorHandler(noErrorHandler())
 
 			// .throttle(1)
@@ -246,16 +254,16 @@ public class ZRouteBuilder extends RouteBuilder {
 					IN.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
 					// IN.setHeader(HttpHeaders.ACCEPT_ENCODING, "gzip, deflate");
 					// IN.setHeader(Exchange.HTTP_CHARACTER_ENCODING, "iso-8859-1");
-					if (IN.getHeader("cnt") == null && Pattern.matches("^[\\dax].*" , file.getName())) {
-						IN.setHeader("cnt", Boolean.TRUE);
-						IN.setHeader("X-Bz-Content-Sha1", sha1(file) + 'e');
-					} else {
-						IN.setHeader("X-Bz-Content-Sha1", sha1(file));
-					}
+//					if (IN.getHeader("cnt") == null && Pattern.matches("^[\\dax].*" , file.getName())) {
+//						IN.setHeader("cnt", Boolean.TRUE);
+//						IN.setHeader("X-Bz-Content-Sha1", sha1(file) + 'e');
+//					} else {
+//						IN.setHeader("X-Bz-Content-Sha1", sha1(file));
+//					}
+					IN.setHeader("X-Bz-Content-Sha1", sha1(file));
 					IN.setHeader("X-Bz-File-Name", remoteFilen);
 					IN.setHeader("X-Bz-Info-Author", "unknown");
 					IN.setBody(file);
-
 				} catch (IOException e) {
 					if (original.getPattern().isOutCapable()) {
 						original.getOut().setBody(e);
@@ -266,7 +274,7 @@ public class ZRouteBuilder extends RouteBuilder {
 		  .log("\n\nafter GetUploadUrl:\n${headers}\n\n")
 			.end();
 
-		from("direct:b2send")
+		from("direct:b2send").routeId("upload_comp")
 //		.errorHandler(noErrorHandler())
 
 //			.onException(UploadException.class).redeliverDelay(3000).to("direct:wrapupload").end()

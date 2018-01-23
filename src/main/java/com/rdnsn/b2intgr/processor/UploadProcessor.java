@@ -97,7 +97,7 @@ public class UploadProcessor implements Processor {
 			System.err.println("responseOut.getHeaders: " + responseOut.getHeaders());
 			
 			Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-			System.err.println("HTTP_RESPONSE_CODE: " + code);
+			System.err.println("HTTP_RESPONSE_CODE: " + code +"\n\n");
 			if (code != null && code == 200) {
 				
 				try {

@@ -77,27 +77,32 @@ public class UploadProcessor implements Processor {
 		
 		exchange.getOut().setHeader("downloadUrl", downloadUrl);
 			
-			Message responseOut = exchange.getContext().createProducerTemplate()
+			final Message responseOut = exchange.getContext().createProducerTemplate()
 				.send(getHttp4Proto(IN.getHeader("authdUploadUrl", String.class)
 						+ "?okStatusCodeRange=100-999"), innerExchg -> {
 				innerExchg.getIn().copyFrom(IN);
 				System.err.println("authdUploadUrl: " + innerExchg.getIn().getHeader("authdUploadUrl"));
 				
+				final String line1 = "Exchange.HTTP_METHOD: " + innerExchg.getIn().getHeader(Exchange.HTTP_METHOD);
+				System.err.println(line1);
+				final String line2 = "Exchange.CONTENT_LENGTH: " + innerExchg.getIn().getHeader(Exchange.CONTENT_LENGTH);
+				System.err.println(line2);
+				
+				final String line3 = "Filen: " + userFile.getFilepath().getFileName();
+				System.err.println(line3);
+				
+				
 				innerExchg.getIn().removeHeader("authdUploadUrl");
 				innerExchg.getIn().removeHeader("remoteAuth");
 				innerExchg.getIn().removeHeader("uploadAuth");
 				innerExchg.getIn().removeHeader("userFile");
-				
-				System.err.println("Exchange.HTTP_METHOD: " + innerExchg.getIn().getHeader(Exchange.HTTP_METHOD));
-				System.err.println("Exchange.CONTENT_LENGTH: " + innerExchg.getIn().getHeader(Exchange.CONTENT_LENGTH));
-				
 			}).getOut();
 		
 			
-			System.err.println("responseOut.getHeaders: " + responseOut.getHeaders());
+//			System.err.println("responseOut.getHeaders: " + responseOut.getHeaders());
 			
 			Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-			System.err.println("HTTP_RESPONSE_CODE: " + code +"\n\n");
+			System.err.println("HTTP_RESPONSE_CODE: " + code + "\nFileName: '" + remoteFilen);
 			if (code != null && code == 200) {
 				
 				try {

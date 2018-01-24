@@ -204,17 +204,17 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 //		.onException( Exception.class).redeliverDelay(3000).end()
 			.log("Calling foo route redelivery count: ${header.CamelRedeliveryCounter}")
-			.to("direct:sub")
+			.to("vm:sub")
 			.end();
 
-		from("direct:sub")
+		from("vm:sub")
 		.errorHandler(noErrorHandler())
-		.threads(3, 8)
+		.threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
 		.to("direct:getUploadUrl", "direct:b2send")
 		.end();
 		
 		from("direct:getUploadUrl").routeId("authupload_comp")
-//			.errorHandler(noErrorHandler())
+			.errorHandler(noErrorHandler())
 
 			// .throttle(1)
 
@@ -254,13 +254,13 @@ public class ZRouteBuilder extends RouteBuilder {
 					IN.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
 					// IN.setHeader(HttpHeaders.ACCEPT_ENCODING, "gzip, deflate");
 					// IN.setHeader(Exchange.HTTP_CHARACTER_ENCODING, "iso-8859-1");
-//					if (IN.getHeader("cnt") == null && Pattern.matches("^[\\dax].*" , file.getName())) {
-//						IN.setHeader("cnt", Boolean.TRUE);
-//						IN.setHeader("X-Bz-Content-Sha1", sha1(file) + 'e');
-//					} else {
-//						IN.setHeader("X-Bz-Content-Sha1", sha1(file));
-//					}
-					IN.setHeader("X-Bz-Content-Sha1", sha1(file));
+					if (IN.getHeader("cnt") == null && Pattern.matches("^[\\dax].*" , file.getName())) {
+						IN.setHeader("cnt", Boolean.TRUE);
+						IN.setHeader("X-Bz-Content-Sha1", sha1(file) + 'e');
+					} else {
+						IN.setHeader("X-Bz-Content-Sha1", sha1(file));
+					}
+//					IN.setHeader("X-Bz-Content-Sha1", sha1(file));
 					IN.setHeader("X-Bz-File-Name", remoteFilen);
 					IN.setHeader("X-Bz-Info-Author", "unknown");
 					IN.setBody(file);
@@ -275,7 +275,7 @@ public class ZRouteBuilder extends RouteBuilder {
 			.end();
 
 		from("direct:b2send").routeId("upload_comp")
-//		.errorHandler(noErrorHandler())
+		.errorHandler(noErrorHandler())
 
 //			.onException(UploadException.class).redeliverDelay(3000).to("direct:wrapupload").end()
 			.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST)

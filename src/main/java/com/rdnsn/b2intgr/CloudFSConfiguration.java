@@ -55,8 +55,33 @@ public class CloudFSConfiguration {
 	
 	@NotNull
 	@JsonProperty
-	private int redeliveryDelay = 5; // Seconds
+	private int redeliveryDelay = 5000; // milliseconds
 	
+	@NotNull
+	@JsonProperty
+	private int poolSize = 5; // number of clients in pool
+	
+	@NotNull
+	@JsonProperty
+	private int maxPoolSize = 10; // max number of clients in pool
+	
+	
+	public int getPoolSize() {
+		return poolSize;
+	}
+
+	public void setPoolSize(int poolSize) {
+		this.poolSize = poolSize;
+	}
+
+	public int getMaxPoolSize() {
+		return maxPoolSize;
+	}
+
+	public void setMaxPoolSize(int maxPoolSize) {
+		this.maxPoolSize = maxPoolSize;
+	}
+
 	public String getAdminEmail() {
 		return adminEmail;
 	}

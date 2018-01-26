@@ -100,45 +100,36 @@ public class ZRouteBuilder extends RouteBuilder {
 		getContext().getGlobalOptions().put("CamelJacksonTypeConverterToPojo", "true");
 	}
 
+	
 	/**
 	 * Routes ...
 	 */
 	public void configure() {
-//		onException( Exception.class).redeliverDelay(3000).to("direct:wrapupload").end();
 
-//		errorHandler(noErrorHandler());
-//	errorHandler(deadLetterChannel("direct:end").redeliveryDelay(1000).onRedelivery(ex -> {
-//		ex.getIn().setHeader(Exchange.DESTINATION_OVERRIDE_URL, "direct:wrapupload");
-//		System.err.println("deadLetterChannel: " + ex.getIn().getHeaders());
-////		System.err.println("deadLetterChannel: " + ex.getOut().getHeaders());
-//	}).logStackTrace(true));
-//		 onException(UploadException.class)
-//     .maximumRedeliveries(3).redeliveryDelay(3000)
-////     .to("direct:wrapupload")
-//     .process(exchange -> {
-//    	 	exchange.getIn().setHeader("cnt", "TRUE");
-//    	 	exchange.getOut().setHeader("cnt", "TRUE");
-//    	 	
-//     }).logStackTrace(false);
+//		 onException(HttpOperationFailedException.class)
+//		 .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
+//		 .redeliveryDelay(serviceConfig.getRedeliveryDelay())
+//		 .end();
 
-//		 .onException(UploadException.class).redeliverDelay(3000).to("direct:wrapupload").end()
-
-		// route specific on exception for MyFunctionalException
-		// we MUST use .end() to indicate that this sub block is ended
-
-		// onException(org.apache.camel.http.common.HttpOperationFailedException.class)
-		// .maximumRedeliveries(serviceConfig.getMaximumRedeliveries()).redeliveryDelay(serviceConfig.getRedeliveryDelay())
-		// .to("direct:wrapupload");
-
-		 onException(UploadException.class) //.to("direct:wrapupload")
-		 .maximumRedeliveries(4).redeliveryDelay(2000)
+		 onException(UploadException.class) 
+		 .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
+		 .redeliveryDelay(serviceConfig.getRedeliveryDelay())
 //		 .asyncDelayedRedelivery()
 		;
+			onException(HttpOperationFailedException.class).onWhen(exchange -> {
+				 exchange.getOut().setHeader("cause", exchange.getException().getMessage());
+				 HttpOperationFailedException exe =
+				 exchange.getException(HttpOperationFailedException.class);
+				 return exe.getStatusCode() > 204;
+				})
+				.redeliveryDelay(2000)
+				 .handled(true)
+				// .continued(true)
+				 .log("HTTP exception handled")
+				 .onException(java.lang.NullPointerException.class);
 
 		// errorHandler(defaultErrorHandler().maximumRedeliveries(3));
 
-		// uploadExceptionHandler();
-		// generalExceptionHandler();
 
 		defineRestServer();
 
@@ -159,37 +150,16 @@ public class ZRouteBuilder extends RouteBuilder {
 
 		// Replies -> HREF to resource
 		from("direct:rest.upload")
-			.process(saveLocally()).wireTap("direct:b2upload")
-			.to("direct:uploadreply")
-			.end();
-
-		from("direct:uploadreply")
-			.process(new Processor() {
-				@Override
-				public void process(Exchange exchange) throws IOException {
-	
-					UploadData obj = exchange.getIn().getBody(UploadData.class);
-					Map<String, String> filemap = obj.getFiles().stream().collect(Collectors.toMap((UserFile x) -> {
-						return x.getFilepath().toUri().toString().replaceFirst("file://" + serviceConfig.getDocRoot(),
-								serviceConfig.getProtocol() + "://" + serviceConfig.getHost());
-					}, uf -> uf.getName()));
-					String sjson = objectMapper.writeValueAsString(filemap);
-					exchange.getOut().setBody(sjson);
-				}
-		});
+			.process(saveLocally())
+				// Send to b2
+				.wireTap("direct:b2upload")
+			.end()
+			.process(replyProxyUrls())
+		.end();
 
 		from("direct:b2upload").routeId("upload_facade")
 			.to("direct:auth")
-			// .delay(1000)
-			// .asyncDelayed()
-			.split(new Expression() {
-				@Override
-				@SuppressWarnings("unchecked")
-				public <T> T evaluate(Exchange exchange, Class<T> type) {
-					UploadData body = exchange.getIn().getBody(UploadData.class);
-					return (T) body.getFiles().iterator();
-				}
-			})
+			.split( new ListSplitExpression())
 			// .delay(1000)
 			// .asyncDelayed()
 			.process(exchange -> {
@@ -201,67 +171,24 @@ public class ZRouteBuilder extends RouteBuilder {
 			.end();
 
 		from("vm:sub")
-//		.errorHandler(noErrorHandler())
-//		.threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
-		.to("direct:wrapupload")
-		.end();
-		
-		from("direct:wrapupload").routeId("atomicupload")
-		.errorHandler(noErrorHandler())
-//		 .onException(Exception.class).to("direct:wrapupload")
-//		 .maximumRedeliveries(4).redeliveryDelay(2000)
-//		 .asyncDelayedRedelivery().end()
-//		
-		.log("Calling foo route redelivery count: ${header.CamelRedeliveryCounter}")
-//		.setHeader("CamelRedeliveryCounter", simple(Boolean.TRUE))
+		.threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
 		.to("direct:b2send")
 		.end();
 		
-
-		
-		from("direct:b2send").routeId("upload_comp")
+		from("direct:b2send").routeId("atomicupload")
 		.errorHandler(noErrorHandler())
+		.log("Calling foo route redelivery count: ${header.CamelRedeliveryCounter}")
 		.process(new UploadProcessor(serviceConfig, objectMapper))
-//			.toD("${header.authdUploadUrl}" + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true"
-//					+ "&disableStreamCache=false&transferException=false")
-
-//	.process(exchange -> {
-//				// System.err.println("headers: " + exchange.getIn().getHeaders());
-//				Integer code = exchange.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//				String body = exchange.getIn().getBody(String.class);
-//				System.err.println("body: " + body);
-//				if (code != null) {
-//					if (code != 200) {
-//						throw new UploadException("bad request " + exchange.getIn().getHeaders());
-//					}
-//					System.err.println("code: " + code);
-//					UploadFileResponse uploadResponse = objectMapper.readValue(body, UploadFileResponse.class);
-//					
-//					exchange.getOut().copyFromWithNewBody(exchange.getIn(), uploadResponse);
-//					
-//					String downloadUrlBase = exchange.getIn().getHeader("downloadUrlBase", String.class);
-//					String remoteFilen = exchange.getIn().getHeader("X-Bz-File-Name", String.class);
-//					
-//					String downloadUrl = String.format("%s/file/%s/%s", downloadUrlBase,
-//							serviceConfig.getRemoteStorageConf().getBucketName(), remoteFilen);
-//					System.err.println(downloadUrl);
-//					exchange.getOut().setHeader("downloadUrl", downloadUrl);
-//				} else {
-//					throw new UploadException("bad request " + exchange.getIn().getHeaders());
-//				}
-//			})
-			// .to("file://output?fileName=url_map.csv&fileExist=append")
-			.end();
+		.end();
+		
 
 
 		from("direct:listdir")
-			.process(new CloudFSProcessor() {
+			.process(new Processor() {
 
 			@Override
 			public void process(Exchange exchange) throws Exception {
 				final AuthResponse authBody = exchange.getIn().getHeader("remoteAuth", AuthResponse.class);
-				// final AuthResponse authBody = (AuthResponse) getReply(exchange,
-				// Verb.authorizeService);
 				exchange.getOut().copyFrom(exchange.getIn());
 
 				final Message responseOut = getContext().createProducerTemplate()
@@ -283,6 +210,24 @@ public class ZRouteBuilder extends RouteBuilder {
 		});
 
 	}
+
+	private Processor replyProxyUrls() {
+		return new Processor() {
+			
+			@Override
+			public void process(Exchange exchange) throws IOException {
+
+				UploadData obj = exchange.getIn().getBody(UploadData.class);
+				Map<String, String> filemap = obj.getFiles().stream().collect(Collectors.toMap((UserFile x) -> {
+					return x.getFilepath().toUri().toString().replaceFirst("file://" + serviceConfig.getDocRoot(),
+							serviceConfig.getProtocol() + "://" + serviceConfig.getHost());
+				}, uf -> uf.getName()));
+				String sjson = objectMapper.writeValueAsString(filemap);
+				exchange.getOut().setBody(sjson);
+			}
+		};
+	}
+
 
 	private RestDefinition defineRestServer() {
 		/**
@@ -313,57 +258,6 @@ public class ZRouteBuilder extends RouteBuilder {
 		// .delete("/{filePath}").to("direct:rest.rm")
 		// .delete("/dir/{dirPath}").to("direct:rest.rmdir")
 		;
-	}
-
-	private String makeUploadReqData() {
-		String uplReqData = null;
-		try {
-			uplReqData = objectMapper.writeValueAsString(ImmutableMap.of("bucketId", "2ab327a44f788e635ef20613"));
-		} catch (JsonProcessingException e) {
-			e.printStackTrace();
-		}
-		return uplReqData;
-	}
-
-	// private OnExceptionDefinition httpExceptionHandler() {
-	// return onException(HttpOperationFailedException.class).onWhen(exchange -> {
-	// exchange.getOut().setHeader("cause", exchange.getException().getMessage());
-	// HttpOperationFailedException exe =
-	// exchange.getException(HttpOperationFailedException.class);
-	// return exe.getStatusCode() > 204;
-	// })
-	// .log("HTTP exception handled")
-	// .handled(true)
-	//// .continued(true)
-	// .onException(java.lang.NullPointerException.class).redeliveryDelay(2000)
-	// .setBody(constant("There will be HttpOperationFailedException blood
-	// because..:\n${header.cause}"));
-	// }
-
-	private OnExceptionDefinition uploadExceptionHandler() {
-		return onException(Exception.class).process(exchange -> {
-			if (exchange.isFailed()) {
-				System.err.println("exchange.getFromRouteId() " + exchange.getFromRouteId());
-				System.err.println("exchange.getException() " + exchange.getException());
-				System.err.println("exchange.getIn().getHeaders() " + exchange.getIn().getHeaders());
-			}
-
-			exchange.getOut().setHeader("cause", exchange.getException());
-			exchange.getOut().setBody(exchange.getIn().getBody());
-			log.debug("except: ", exchange.getException()); // HttpOperationFailedException exe =
-																											// exchange.getException(HttpOperationFailedException.class);
-		}).log("Not handled").handled(false) // .continued(true)
-				.setBody(constant("cause: ${header.cause}"));
-	}
-
-	private OnExceptionDefinition generalExceptionHandler() {
-		return onException(Exception.class).process(exchange -> {
-			exchange.getOut().setHeader("cause", exchange.getException());
-			exchange.getOut().setBody(exchange.getIn().getBody());
-			log.debug("except: ", exchange.getException()); // HttpOperationFailedException exe =
-																											// exchange.getException(HttpOperationFailedException.class);
-		}).log("Not handled").handled(false) // .continued(true)
-				.setBody(constant("cause: ${header.cause}"));
 	}
 
 	private Processor saveLocally() {
@@ -421,22 +315,14 @@ public class ZRouteBuilder extends RouteBuilder {
 
 		};
 	}
-
-	public static class MyCustomExpression implements Expression {
-
+	
+	private class ListSplitExpression implements Expression {
 		@Override
 		@SuppressWarnings("unchecked")
 		public <T> T evaluate(Exchange exchange, Class<T> type) {
-			final String body = exchange.getIn().getBody(String.class);
-
-			// just split the body by comma
-			String[] parts = body.split(",");
-			List<String> list = new ArrayList<String>();
-			for (String part : parts) {
-				list.add(part);
-			}
-
-			return (T) list.iterator();
+			UploadData body = exchange.getIn().getBody(UploadData.class);
+			return (T) body.getFiles().iterator();
 		}
-	}
+	}		
+
 }

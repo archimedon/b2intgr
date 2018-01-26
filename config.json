@@ -8,6 +8,8 @@
 	"adminEmail" : "ronniedz@gmail.com",
 	"maximumRedeliveries" : 4,
 	"redeliveryDelay" : 3000,
+  "poolSize" : 5,
+  "maxPoolSize" : 10,
 	"remoteStorageConf" : {
 		"bucket" : {
 			"name" : "b2public",

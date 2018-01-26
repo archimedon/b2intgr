@@ -73,18 +73,12 @@ public class UploadProcessor implements Processor {
 	}
 
 	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authdUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
-		final String uploadUrl = getHttp4Proto(authdUploadUrl);
-		System.err.println("uploadUrl: " + uploadUrl);
 
-		final String json = producer.send(uploadUrl, innerExchg -> {
+		return objectMapper.readValue(producer.send(getHttp4Proto(authdUploadUrl) + "?throwExceptionOnFailure=true", innerExchg -> {
 			innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, "POST");
 			innerExchg.getIn().setHeader(HttpHeaders.AUTHORIZATION, authtoken);
 			innerExchg.getIn().setBody(makeUploadReqData());
-		}).getOut().getBody(String.class);
-		
-		System.err.println("json: " + json);
-
-		return objectMapper.readValue(json, GetUploadUrlResponse.class);				
+		}).getOut().getBody(String.class), GetUploadUrlResponse.class);				
 	}
 	
 	@Override
@@ -92,32 +86,30 @@ public class UploadProcessor implements Processor {
 		
 		final UserFile userFile = exchange.getIn().getHeader("userFile", UserFile.class);
 		final AuthResponse remoteAuth = exchange.getIn().getHeader("remoteAuth", AuthResponse.class);
-		final String downloadUrlBase = remoteAuth.getDownloadUrl();
 
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
 		
 		final GetUploadUrlResponse uploadAuth = doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());		
-		final String authdUploadUrl = getHttp4Proto(uploadAuth.getUploadUrl());
+		final String authdUploadUrl = getHttp4Proto(uploadAuth.getUploadUrl())
+				 + "?throwExceptionOnFailure=true";
+//				 + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true&disableStreamCache=true";
 		
 		final String XBzFileName = userFile.getName();
 		final File file = userFile.getFilepath().toFile();
 		
-		final String downloadUrl = String.format("%s/file/%s/%s", downloadUrlBase, serviceConfig.getRemoteStorageConf().getBucketName(), XBzFileName);
-		String url = authdUploadUrl;// + "?throwExceptionOnFailure=true&disableStreamCache=true&transferException=false";
-		
-		String composite = "authdUploadUrl: " + authdUploadUrl + "\n";
-	
-		final Message responseOut = producer.send(url, innerExchg -> {
+		final Message responseOut = producer.send(authdUploadUrl, innerExchg -> {
+			
 				final Message postMessage = innerExchg.getIn();
 				
 				postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-				postMessage.setHeader("authdUploadUrl", authdUploadUrl);
 				
+				System.err.println("Uploading... '" + XBzFileName + "'\n");
+
 				postMessage.setHeader("X-Bz-File-Name", XBzFileName);
 				String sha1 = sha1(file);
-				if (
-						Pattern.matches("^[\\dax].*" , file.getName())
-						&& exchange.getIn().getHeader("CamelRedeliveryCounter", Integer.class) < 2
+				if (log.isDebugEnabled() &&
+						Pattern.matches("^[\\d{4}\\d+].*" , file.getName())
+						&& exchange.getIn().getHeader("CamelRedeliveryCounter", Integer.class) < 1
 					) {
 						sha1 = sha1 + 'e';
 				}
@@ -128,50 +120,34 @@ public class UploadProcessor implements Processor {
 				postMessage.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
 				postMessage.setHeader("X-Bz-Info-Author", "unknown");
 				postMessage.setBody(file);
-				System.err.println(composite + "getHeaders: " + postMessage.getHeaders());
-
-//					
-//				System.err.println("authdUploadUrl: " + innerExchg.getIn().getHeader("authdUploadUrl"));
-//				
-//				final String line1 = "Exchange.HTTP_METHOD: " + innerExchg.getIn().getHeader(Exchange.HTTP_METHOD);
-//				System.err.println(line1);
-//				final String line2 = "Exchange.CONTENT_LENGTH: " + innerExchg.getIn().getHeader(Exchange.CONTENT_LENGTH);
-//				System.err.println(line2);
-//				
-//				final String line3 = "Filen: " + userFile.getFilepath().getFileName();
-//				System.err.println(line3);
-//				
-//				
-//				innerExchg.getIn().removeHeader("authdUploadUrl");
-//				innerExchg.getIn().removeHeader("remoteAuth");
-//				innerExchg.getIn().removeHeader("uploadAuth");
-//				innerExchg.getIn().removeHeader("userFile");
 			}).getOut();
+		producer.stop();
 		
+			final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+			final String response = responseOut.getBody(String.class);
 			
-//			System.err.println("responseOut.getHeaders: " + responseOut.getHeaders());
 			
-			Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 			System.err.println("HTTP_RESPONSE_CODE: " + code + "\nFileName: '" + XBzFileName);
 			if (code != null && code == 200) {
+				final String downloadUrl =  String.format("%s/file/%s/%s",
+						remoteAuth.getDownloadUrl(), serviceConfig.getRemoteStorageConf().getBucketName(), XBzFileName);
+				System.err.println("Completed: '" + downloadUrl);
 				try {
-					UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
+					UploadFileResponse uploadResponse = objectMapper.readValue(response, UploadFileResponse.class);
 					exchange.getOut().copyFromWithNewBody(responseOut, ImmutableList.of(BeanUtils.describe(uploadResponse)));
 
-					exchange.getOut().setBody( ImmutableList.of(BeanUtils.describe(uploadResponse)));
-				} catch (IOException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+
+					exchange.getOut().setHeader("downloadUrl", downloadUrl);
+					
+//					exchange.getOut().setBody( ImmutableList.of(BeanUtils.describe(uploadResponse)));
+				} catch (Exception e) {
 					throw new UploadException(e);
 				}
 			}
 			else {
 				throw new UploadException("Response code not OK (" + code + ") File '" + XBzFileName +"' not uploaded" );
 			}
-			producer.stop();
 	}
-
-	
-	
-	
 
 	private static String sha1(final File file) {
 		String ans = null;
@@ -182,7 +158,7 @@ public class UploadProcessor implements Processor {
 			final byte[] buffer = new byte[1024];
 			for (int read = 0; (read = is.read(buffer)) != -1;) {
 				messageDigest.update(buffer, 0, read);
-			}
+			}                                                                                                         
 
 			// Convert the byte to hex format
 			try (Formatter formatter = new Formatter()) {

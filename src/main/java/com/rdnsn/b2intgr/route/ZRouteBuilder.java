@@ -104,21 +104,22 @@ public class ZRouteBuilder extends RouteBuilder {
 	 * Routes ...
 	 */
 	public void configure() {
+//		onException( Exception.class).redeliverDelay(3000).to("direct:wrapupload").end();
 
 //		errorHandler(noErrorHandler());
-	errorHandler(deadLetterChannel("direct:end").redeliveryDelay(1000).onRedelivery(ex -> {
-		ex.getIn().setHeader(Exchange.DESTINATION_OVERRIDE_URL, "direct:wrapupload");
-		System.err.println("deadLetterChannel: " + ex.getIn().getHeaders());
-//		System.err.println("deadLetterChannel: " + ex.getOut().getHeaders());
-	}).logStackTrace(true));
-		 onException(UploadException.class)
-     .maximumRedeliveries(3).redeliveryDelay(3000)
-//     .to("direct:wrapupload")
-     .process(exchange -> {
-    	 	exchange.getIn().setHeader("cnt", "TRUE");
-    	 	exchange.getOut().setHeader("cnt", "TRUE");
-    	 	
-     }).logStackTrace(false);
+//	errorHandler(deadLetterChannel("direct:end").redeliveryDelay(1000).onRedelivery(ex -> {
+//		ex.getIn().setHeader(Exchange.DESTINATION_OVERRIDE_URL, "direct:wrapupload");
+//		System.err.println("deadLetterChannel: " + ex.getIn().getHeaders());
+////		System.err.println("deadLetterChannel: " + ex.getOut().getHeaders());
+//	}).logStackTrace(true));
+//		 onException(UploadException.class)
+//     .maximumRedeliveries(3).redeliveryDelay(3000)
+////     .to("direct:wrapupload")
+//     .process(exchange -> {
+//    	 	exchange.getIn().setHeader("cnt", "TRUE");
+//    	 	exchange.getOut().setHeader("cnt", "TRUE");
+//    	 	
+//     }).logStackTrace(false);
 
 //		 .onException(UploadException.class).redeliverDelay(3000).to("direct:wrapupload").end()
 
@@ -129,9 +130,9 @@ public class ZRouteBuilder extends RouteBuilder {
 		// .maximumRedeliveries(serviceConfig.getMaximumRedeliveries()).redeliveryDelay(serviceConfig.getRedeliveryDelay())
 		// .to("direct:wrapupload");
 
-		// onException(Exception.class).to("direct:wrapupload")
-		// .maximumRedeliveries(4).redeliveryDelay(2000)
-		// .asyncDelayedRedelivery()
+		 onException(UploadException.class) //.to("direct:wrapupload")
+		 .maximumRedeliveries(4).redeliveryDelay(2000)
+//		 .asyncDelayedRedelivery()
 		;
 
 		// errorHandler(defaultErrorHandler().maximumRedeliveries(3));
@@ -196,92 +197,31 @@ public class ZRouteBuilder extends RouteBuilder {
 				exchange.getIn().setBody(null);
 				exchange.getIn().setHeader("userFile", uf);
 			})
-			.to("direct:wrapupload")
-			.end();
-
-		from("direct:wrapupload").routeId("atomicupload")
-//		.errorHandler(noErrorHandler())
-		
-//		.onException( Exception.class).redeliverDelay(3000).end()
-			.log("Calling foo route redelivery count: ${header.CamelRedeliveryCounter}")
 			.to("vm:sub")
 			.end();
 
 		from("vm:sub")
-		.errorHandler(noErrorHandler())
-		.threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
-		.to("direct:getUploadUrl", "direct:b2send")
+//		.errorHandler(noErrorHandler())
+//		.threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
+		.to("direct:wrapupload")
 		.end();
 		
-		from("direct:getUploadUrl").routeId("authupload_comp")
-			.errorHandler(noErrorHandler())
+		from("direct:wrapupload").routeId("atomicupload")
+		.errorHandler(noErrorHandler())
+//		 .onException(Exception.class).to("direct:wrapupload")
+//		 .maximumRedeliveries(4).redeliveryDelay(2000)
+//		 .asyncDelayedRedelivery().end()
+//		
+		.log("Calling foo route redelivery count: ${header.CamelRedeliveryCounter}")
+//		.setHeader("CamelRedeliveryCounter", simple(Boolean.TRUE))
+		.to("direct:b2send")
+		.end();
+		
 
-			// .throttle(1)
-
-			// Prepare Exchange for http-post to Backblaze - `upload_file` operation
-			.setHeader(Exchange.HTTP_METHOD, constant("POST"))
-			.setBody(simple(makeUploadReqData()))
-			
-			.enrich(getHttp4Proto(authAgent.getRemoteAuth().resolveGetUploadUrl()), (original, resource) -> {
-				try {
-					final Message IN = original.getIn();
-					final GetUploadUrlResponse uploadAuth = objectMapper.readValue(resource.getIn().getBody(String.class),
-							GetUploadUrlResponse.class);
-
-					final UserFile userFile = IN.getHeader("userFile", UserFile.class);
-
-					final File file = userFile.getFilepath().toFile();
-					final String remoteFilen = userFile.getName();
-
-					log.debug("File-Name: {}", remoteFilen);
-					log.debug("Content-Type: {}", userFile.getContentType());
-					log.debug("Content-Length: {}", file.length());
-
-					String authdUploadUrl = uploadAuth.getUploadUrl();
-					// String authdUploadUrl = getHttp4Proto("https://www.google.com");
-					log.debug("uploadAuth: {}", authdUploadUrl);
-
-					IN.setHeader("uploadAuth", uploadAuth);
-					// IN.setHeader("uploadAuthToken", uploadAuth.getAuthorizationToken());
-					IN.setHeader("authdUploadUrl", authdUploadUrl);
-					// IN.setHeader(Exchange.HTTP_URI,
-					// IN.setHeader(Exchange.HTTP_URI,
-					// uploadAuth.getUploadUrl().replaceFirst("https:", ""));
-					IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-					// IN.setHeader(Exchange.CONTENT_ENCODING, "gzip" );
-					IN.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
-					IN.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
-					IN.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
-					// IN.setHeader(HttpHeaders.ACCEPT_ENCODING, "gzip, deflate");
-					// IN.setHeader(Exchange.HTTP_CHARACTER_ENCODING, "iso-8859-1");
-					if (IN.getHeader("cnt") == null && Pattern.matches("^[\\dax].*" , file.getName())) {
-						IN.setHeader("cnt", Boolean.TRUE);
-						IN.setHeader("X-Bz-Content-Sha1", sha1(file) + 'e');
-					} else {
-						IN.setHeader("X-Bz-Content-Sha1", sha1(file));
-					}
-//					IN.setHeader("X-Bz-Content-Sha1", sha1(file));
-					IN.setHeader("X-Bz-File-Name", remoteFilen);
-					IN.setHeader("X-Bz-Info-Author", "unknown");
-					IN.setBody(file);
-				} catch (IOException e) {
-					if (original.getPattern().isOutCapable()) {
-						original.getOut().setBody(e);
-					}
-				}
-				return original;
-			})
-		  .log("\n\nafter GetUploadUrl:\n${headers}\n\n")
-			.end();
-
+		
 		from("direct:b2send").routeId("upload_comp")
 		.errorHandler(noErrorHandler())
-
-//			.onException(UploadException.class).redeliverDelay(3000).to("direct:wrapupload").end()
-			.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST)
-			
-		  .process(new UploadProcessor(serviceConfig, objectMapper))
-
+		.process(new UploadProcessor(serviceConfig, objectMapper))
 //			.toD("${header.authdUploadUrl}" + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true"
 //					+ "&disableStreamCache=false&transferException=false")
 
@@ -424,31 +364,6 @@ public class ZRouteBuilder extends RouteBuilder {
 																											// exchange.getException(HttpOperationFailedException.class);
 		}).log("Not handled").handled(false) // .continued(true)
 				.setBody(constant("cause: ${header.cause}"));
-	}
-
-	public static String sha1(final File file) {
-		String ans = null;
-		try {
-			final MessageDigest messageDigest = MessageDigest.getInstance("SHA1");
-
-			InputStream is = new BufferedInputStream(new FileInputStream(file));
-			final byte[] buffer = new byte[1024];
-			for (int read = 0; (read = is.read(buffer)) != -1;) {
-				messageDigest.update(buffer, 0, read);
-			}
-
-			// Convert the byte to hex format
-			try (Formatter formatter = new Formatter()) {
-				for (final byte b : messageDigest.digest()) {
-					formatter.format("%02x", b);
-				}
-				ans = formatter.toString();
-			}
-		} catch (IOException | NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		}
-
-		return ans;
 	}
 
 	private Processor saveLocally() {

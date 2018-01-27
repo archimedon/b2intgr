@@ -1,4 +1,4 @@
-package com.rdnsn.b2intgr.route;
+package com.rdnsn.b2intgr.model;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;

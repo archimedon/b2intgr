@@ -1,4 +1,4 @@
-package com.rdnsn.b2intgr.api;
+package com.rdnsn.b2intgr;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -38,6 +38,19 @@ public class RemoteStorageConfiguration {
 	@JsonProperty
 	private String applicationKey = "0012091458045a46b01b14df849c659aebb820a53c";
 
+	
+	
+	/**
+	 * "buckets": [
+    {
+        "accountId": "30f20426f0b1",
+        "bucketId": "4a48fe8875c6214145260818",
+        "bucketInfo": {},
+        "bucketName" : "Kitten-Videos",
+        "bucketType": "allPrivate",
+        "lifecycleRules": []
+    }, ... ]
+	 */
 	@NotNull
 	@JsonProperty
 	private Map<String, String> bucket = new HashMap<String, String>();
@@ -76,11 +89,11 @@ public class RemoteStorageConfiguration {
 	}
 
 	public String getBucketName() {
-		return this.bucket.get("name");
+		return this.bucket.get("bucketName");
 	}
 
 	public String getBucketId() {
-		return this.bucket.get("id");
+		return this.bucket.get("bucketId");
 	}
 	
 	public static String getHttp4Proto(String url) {

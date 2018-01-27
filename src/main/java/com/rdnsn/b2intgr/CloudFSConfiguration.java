@@ -8,7 +8,6 @@ import javax.validation.constraints.NotNull;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.rdnsn.b2intgr.api.RemoteStorageConfiguration;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize()
@@ -18,7 +17,7 @@ public class CloudFSConfiguration {
 	 * Configure the Remote server
 	 */
 	@NotNull
-    @JsonProperty
+  @JsonProperty
 	private RemoteStorageConfiguration remoteStorageConf;
     
 	@NotNull

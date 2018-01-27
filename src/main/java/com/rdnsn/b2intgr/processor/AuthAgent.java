@@ -9,8 +9,8 @@ import org.apache.commons.lang3.StringUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.Constants;
 import com.rdnsn.b2intgr.api.AuthResponse;
-import com.rdnsn.b2intgr.api.MultipartAgent;
 
 public class AuthAgent implements AggregationStrategy {
 	
@@ -22,7 +22,7 @@ public class AuthAgent implements AggregationStrategy {
 		this.objectMapper = objectMapper;
 		ma = new MultipartAgent(
 			remoteAuthenticationUrl,
-			ImmutableMap.of("Authorization", "Basic " + basicAuthHeader)
+			ImmutableMap.of(Constants.AUTHORIZATION, "Basic " + basicAuthHeader)
 		);
 		System.out.println("Retrieved Initial Token:\n" + getRemoteAuth());
 	}
@@ -44,12 +44,11 @@ public class AuthAgent implements AggregationStrategy {
             return resource;
         }
 		auth = resource.getIn().getBody(AuthResponse.class);
-		original.getIn().setHeader("remoteAuth", auth);
-		original.getIn().setHeader("Authorization", auth.getAuthorizationToken());
-		original.getIn().setHeader("downloadUrlBase", auth.getDownloadUrl());
+		original.getIn().setHeader(Constants.AUTH_RESPONSE, auth);
+		original.getIn().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
 		
 	    if (original.getPattern().isOutCapable()) {
-	        original.getOut().setHeader("remoteAuth", auth);
+	        original.getOut().setHeader(Constants.AUTH_RESPONSE, auth);
 	    }
 	    return original;
 	}

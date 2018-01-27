@@ -1,29 +1,22 @@
 package com.rdnsn.b2intgr.processor;
 
-import java.lang.reflect.InvocationTargetException;
-import java.nio.charset.StandardCharsets;
+import static com.rdnsn.b2intgr.RemoteStorageConfiguration.getHttp4Proto;
+
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Formatter;
+import java.util.regex.Pattern;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.http4.HttpMethods;
 import org.apache.commons.beanutils.BeanUtils;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.client.methods.RequestBuilder;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.mime.HttpMultipartMode;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.entity.mime.content.FileBody;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,133 +26,125 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.net.HttpHeaders;
 import com.rdnsn.b2intgr.CloudFSConfiguration;
+import com.rdnsn.b2intgr.Constants;
 import com.rdnsn.b2intgr.api.AuthResponse;
 import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
 import com.rdnsn.b2intgr.api.UploadFileResponse;
-import com.rdnsn.b2intgr.route.UserFile;
-
-import static com.rdnsn.b2intgr.api.RemoteStorageConfiguration.getHttp4Proto;
-
-import java.io.*;
-import java.util.*;
-import java.util.regex.Pattern;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import com.rdnsn.b2intgr.model.UserFile;
+import com.rdnsn.b2intgr.route.ZRouteBuilder;
 
 
 
-public class UploadProcessor implements Processor {
+public class UploadProcessor extends BaseProcessor {
 
 	protected static final Logger log = LoggerFactory.getLogger(UploadProcessor.class);
-	private static final String UTF_8 = StandardCharsets.UTF_8.toString();
+	
 	private final ObjectMapper objectMapper;
 	private final CloudFSConfiguration serviceConfig;
+	private String bucketMap;
     
 	public UploadProcessor(CloudFSConfiguration serviceConfig, ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
 		this.serviceConfig = serviceConfig;
-	}
-	
-	private String makeUploadReqData() {
-		String uplReqData = null;
 		try {
-			uplReqData = objectMapper.writeValueAsString(ImmutableMap.of("bucketId", "2ab327a44f788e635ef20613"));
+			this.bucketMap = objectMapper.writeValueAsString(ImmutableMap.of("bucketId", serviceConfig.getRemoteBucketId()));
 		} catch (JsonProcessingException e) {
-			e.printStackTrace();
+			throw new RuntimeException(e.getCause());
 		}
-		return uplReqData;
 	}
 
 	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authdUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
 
-		return objectMapper.readValue(producer.send(getHttp4Proto(authdUploadUrl) + "?throwExceptionOnFailure=true", innerExchg -> {
+		return objectMapper.readValue(producer.send(getHttp4Proto(authdUploadUrl) + ZRouteBuilder.HTTP4_PARAMS, innerExchg -> {
 			innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, "POST");
-			innerExchg.getIn().setHeader(HttpHeaders.AUTHORIZATION, authtoken);
-			innerExchg.getIn().setBody(makeUploadReqData());
+			innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
+			innerExchg.getIn().setBody(this.bucketMap);
 		}).getOut().getBody(String.class), GetUploadUrlResponse.class);				
 	}
 	
 	@Override
 	public void process(Exchange exchange) throws Exception {
 		
-		final UserFile userFile = exchange.getIn().getHeader("userFile", UserFile.class);
-		final AuthResponse remoteAuth = exchange.getIn().getHeader("remoteAuth", AuthResponse.class);
+		final UserFile userFile = exchange.getIn().getHeader(Constants.USER_FILE, UserFile.class);
+		final AuthResponse remoteAuth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
 
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
 		
-		final GetUploadUrlResponse uploadAuth = doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());		
-		final String authdUploadUrl = getHttp4Proto(uploadAuth.getUploadUrl())
-				 + "?throwExceptionOnFailure=true";
-//				 + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true&disableStreamCache=true";
+		final GetUploadUrlResponse uploadAuth =
+				doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
 		
-		final String XBzFileName = userFile.getName();
+		final String authdUploadUrl =
+				getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS;
+		
 		final File file = userFile.getFilepath().toFile();
 		
 		final Message responseOut = producer.send(authdUploadUrl, innerExchg -> {
+			final Message postMessage = innerExchg.getIn();
+			postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
 			
-				final Message postMessage = innerExchg.getIn();
-				
-				postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-				
-				System.err.println("Uploading... '" + XBzFileName + "'\n");
-
-				postMessage.setHeader("X-Bz-File-Name", XBzFileName);
-				String sha1 = sha1(file);
-				if (log.isDebugEnabled() &&
-						Pattern.matches("^[\\d{4}\\d+].*" , file.getName())
-						&& exchange.getIn().getHeader("CamelRedeliveryCounter", Integer.class) < 1
-					) {
-						sha1 = sha1 + 'e';
-				}
-				postMessage.setHeader("X-Bz-Content-Sha1", sha1);
-
-				postMessage.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
-				postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
-				postMessage.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
-				postMessage.setHeader("X-Bz-Info-Author", "unknown");
-				postMessage.setBody(file);
-			}).getOut();
-		producer.stop();
+			log.info("\"Upload\":{ \"xBzFileName\": \"{}\"}", userFile.getName());
+			
+			postMessage.setHeader(Constants.X_BZ_FILE_NAME, userFile.getName());
+			
+			String sha1 = sha1(file);
+			if (log.isDebugEnabled()) {
+				corruptSomeHashes(sha1, exchange, file);
+			}
+			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, sha1);
+			
+			postMessage.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
+			postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
+			postMessage.setHeader(Constants.AUTHORIZATION, uploadAuth.getAuthorizationToken());
+			postMessage.setHeader(Constants.X_BZ_INFO_AUTHOR, "unknown");
+			postMessage.setBody(file);
+		}).getOut();
 		
-			final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-			final String response = responseOut.getBody(String.class);
-			
-			
-			System.err.println("HTTP_RESPONSE_CODE: " + code + "\nFileName: '" + XBzFileName);
-			if (code != null && code == 200) {
-				final String downloadUrl =  String.format("%s/file/%s/%s",
-						remoteAuth.getDownloadUrl(), serviceConfig.getRemoteStorageConf().getBucketName(), XBzFileName);
-				System.err.println("Completed: '" + downloadUrl);
-				try {
-					UploadFileResponse uploadResponse = objectMapper.readValue(response, UploadFileResponse.class);
-					exchange.getOut().copyFromWithNewBody(responseOut, ImmutableList.of(BeanUtils.describe(uploadResponse)));
+		producer.stop();
+		final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+		final String response = responseOut.getBody(String.class);
 
+		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getName());
 
-					exchange.getOut().setHeader("downloadUrl", downloadUrl);
-					
-//					exchange.getOut().setBody( ImmutableList.of(BeanUtils.describe(uploadResponse)));
-				} catch (Exception e) {
-					throw new UploadException(e);
-				}
+		if (code != null && code == 200) {
+			final String downloadUrl =  String.format("%s/file/%s/%s",
+					remoteAuth.getDownloadUrl(), serviceConfig.getRemoteStorageConf().getBucketName(), userFile.getName());
+			
+			log.info("Completed: '{}'", downloadUrl);
+
+			try {
+				UploadFileResponse uploadResponse = objectMapper.readValue(response, UploadFileResponse.class);
+				exchange.getOut().copyFromWithNewBody(responseOut, ImmutableList.of(BeanUtils.describe(uploadResponse)));
+				exchange.getOut().setHeader(Constants.DOWNLOAD_URL, downloadUrl);
+			} catch (Exception e) {
+				throw new UploadException(e);
 			}
-			else {
-				throw new UploadException("Response code not OK (" + code + ") File '" + XBzFileName +"' not uploaded" );
-			}
+		}
+		else {
+			throw new UploadException("Response code not OK (" + code + ") File '" + userFile.getName() +"' not uploaded" );
+		}
 	}
 
-	private static String sha1(final File file) {
+	private void corruptSomeHashes(String sha1, Exchange exchange, File file) {
+		
+		if (Pattern.matches("^[\\d{3}\\d+].*" , file.getName())
+				&& exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class) < 1)
+		{
+			sha1 = sha1 + 'e';
+		}
+	}
+
+	private String sha1(final File file) {
 		String ans = null;
 		try {
 			final MessageDigest messageDigest = MessageDigest.getInstance("SHA1");
 
-			InputStream is = new BufferedInputStream(new FileInputStream(file));
-			final byte[] buffer = new byte[1024];
-			for (int read = 0; (read = is.read(buffer)) != -1;) {
-				messageDigest.update(buffer, 0, read);
-			}                                                                                                         
-
+			try(InputStream is = new BufferedInputStream(new FileInputStream(file))) {
+				final byte[] buffer = new byte[1024];
+				for (int read = 0; (read = is.read(buffer)) != -1;) {
+					messageDigest.update(buffer, 0, read);
+				}                                                                                                         
+			}
 			// Convert the byte to hex format
 			try (Formatter formatter = new Formatter()) {
 				for (final byte b : messageDigest.digest()) {
@@ -170,146 +155,6 @@ public class UploadProcessor implements Processor {
 		} catch (IOException | NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		}
-
 		return ans;
 	}
-
-
-	
-	
-	
-	
-	
-	
-	
-	
-//	
-//	
-//	postMessage.setHeader("uploadAuth", uploadAuth);
-//	// postBody.setHeader("uploadAuthToken", uploadAuth.getAuthorizationToken());
-//	postMessage.setHeader("authdUploadUrl", authdUploadUrl);
-//	// postBody.setHeader(Exchange.HTTP_URI,
-//	// postBody.setHeader(Exchange.HTTP_URI,
-//	// uploadAuth.getUploadUrl().replaceFirst("https:", ""));
-//	postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-//	// postBody.setHeader(Exchange.CONTENT_ENCODING, "gzip" );
-//	postMessage.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
-//	postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
-//	postMessage.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
-//	// postBody.setHeader(HttpHeaders.ACCEPT_ENCODING, "gzip, deflate");
-//	// postBody.setHeader(Exchange.HTTP_CHARACTER_ENCODING, "iso-8859-1");
-//	if (postMessage.getHeader("cnt") == null && Pattern.matches("^[\\dax].*" , file.getName())) {
-//		postMessage.setHeader("cnt", Boolean.TRUE);
-//		postMessage.setHeader("X-Bz-Content-Sha1", sha1(file) + 'e');
-//	} else {
-//		postMessage.setHeader("X-Bz-Content-Sha1", sha1(file));
-//	}
-////	postBody.setHeader("X-Bz-Content-Sha1", sha1(file));
-//	postMessage.setHeader("X-Bz-File-Name", remoteFilen);
-//	postMessage.setHeader("X-Bz-Info-Author", "unknown");
-////	postBody.setBody(file);
-
-	
-	
-//	.enrich(getHttp4Proto(authAgent.getRemoteAuth().resolveGetUploadUrl()), (original, resource) -> {
-//		try {
-//			final Message IN = original.getIn();
-//			final GetUploadUrlResponse uploadAuth = objectMapper.readValue(resource.getIn().getBody(String.class),
-//					GetUploadUrlResponse.class);
-//
-//			final UserFile userFile = IN.getHeader("userFile", UserFile.class);
-//
-//			final File file = userFile.getFilepath().toFile();
-//			final String remoteFilen = userFile.getName();
-//
-//			log.debug("File-Name: {}", remoteFilen);
-//			log.debug("Content-Type: {}", userFile.getContentType());
-//			log.debug("Content-Length: {}", file.length());
-//
-//			String authdUploadUrl = uploadAuth.getUploadUrl();
-//			// String authdUploadUrl = getHttp4Proto("https://www.google.com");
-//			log.debug("uploadAuth: {}", authdUploadUrl);
-//
-//			IN.setHeader("uploadAuth", uploadAuth);
-//			// IN.setHeader("uploadAuthToken", uploadAuth.getAuthorizationToken());
-//			IN.setHeader("authdUploadUrl", authdUploadUrl);
-//			// IN.setHeader(Exchange.HTTP_URI,
-//			// IN.setHeader(Exchange.HTTP_URI,
-//			// uploadAuth.getUploadUrl().replaceFirst("https:", ""));
-//			IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-//			// IN.setHeader(Exchange.CONTENT_ENCODING, "gzip" );
-//			IN.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
-//			IN.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
-//			IN.setHeader(HttpHeaders.AUTHORIZATION, uploadAuth.getAuthorizationToken());
-//			// IN.setHeader(HttpHeaders.ACCEPT_ENCODING, "gzip, deflate");
-//			// IN.setHeader(Exchange.HTTP_CHARACTER_ENCODING, "iso-8859-1");
-//			if (IN.getHeader("cnt") == null && Pattern.matches("^[\\dax].*" , file.getName())) {
-//				IN.setHeader("cnt", Boolean.TRUE);
-//				IN.setHeader("X-Bz-Content-Sha1", sha1(file) + 'e');
-//			} else {
-//				IN.setHeader("X-Bz-Content-Sha1", sha1(file));
-//			}
-////			IN.setHeader("X-Bz-Content-Sha1", sha1(file));
-//			IN.setHeader("X-Bz-File-Name", remoteFilen);
-//			IN.setHeader("X-Bz-Info-Author", "unknown");
-//			IN.setBody(file);
-//		} catch (IOException e) {
-//			if (original.getPattern().isOutCapable()) {
-//				original.getOut().setBody(e);
-//			}
-//		}
-//		return original;
-//}
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-//	private String composeDownloadUrl(AuthResponse remoteAuth, UploadFileResponse uploadResponse) {
-//		return String.format("%s/file/%s/%s", remoteAuth.getDownloadUrl(), serviceConfig.getRemoteStorageConf().getBucketName(), uploadResponse.getFileName());
-//	}
-//
-//
-//	static public String myInputStreamReader(InputStream in) throws IOException {
-//	    InputStreamReader reader = new InputStreamReader(in);
-//	    StringBuilder sb = new StringBuilder();
-//	    int c = reader.read();
-//	    while (c != -1) {
-//	        sb.append((char)c);
-//	        c = reader.read();
-//	    }
-//	    reader.close();
-//	    return sb.toString();
-//	}
 }
-//String uploadUrl = ""; // Provided by b2_get_upload_url
-//String uploadAuthorizationToken = ""; // Provided by b2_get_upload_url
-//String fileName = ""; // The name of the file you are uploading
-//String contentType = ""; // The content type of the file
-//String sha1 = ""; // SHA1 of the file you are uploading
-//byte[] fileData;
-//HttpURLConnection connection = null;
-//String json = null;
-//try {
-//    URL url = new URL(uploadUrl);
-//    connection = (HttpURLConnection)url.openConnection();
-//    connection.setRequestMethod("POST");
-//    connection.setRequestProperty("Authorization", uploadAuthorizationToken);
-//    connection.setRequestProperty("Content-Type", contentType);
-//    connection.setRequestProperty("X-Bz-File-Name", fileName);
-//    connection.setRequestProperty("X-Bz-Content-Sha1", sha1);
-//    connection.setDoOutput(true);
-//    DataOutputStream writer = new DataOutputStream(connection.getOutputStream());
-//    writer.write(fileData);
-//    String jsonResponse = myInputStreamReader(connection.getInputStream());
-//    System.out.println(jsonResponse);
-//} catch (Exception e) {
-//    e.printStackTrace();
-//} finally {
-//    connection.disconnect();
-//}

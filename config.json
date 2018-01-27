@@ -12,8 +12,8 @@
   "maxPoolSize" : 10,
 	"remoteStorageConf" : {
 		"bucket" : {
-			"name" : "b2public",
-			"id" : "2ab327a44f788e635ef20613"
+			"bucketName" : "b2public",
+			"bucketId" : "2ab327a44f788e635ef20613"
 		},
 		"accountId" : "a374f8e3e263",
 		"applicationKey" : "0012091458045a46b01b14df849c659aebb820a53c",

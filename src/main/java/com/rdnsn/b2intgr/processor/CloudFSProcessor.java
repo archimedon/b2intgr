@@ -26,6 +26,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.Constants;
 import com.rdnsn.b2intgr.api.AuthResponse;
 
 public abstract class CloudFSProcessor implements Processor {
@@ -49,7 +50,7 @@ public abstract class CloudFSProcessor implements Processor {
 				exchange.getIn().setHeader(B2AUTHN, val);
 				exchange.getOut().setHeader(B2AUTHN, val);
 				exchange.setProperty(B2AUTHN, val);
-				exchange.getOut().setHeader("Authorization", ((AuthResponse)val).getAuthorizationToken());
+				exchange.getOut().setHeader(Constants.AUTHORIZATION, ((AuthResponse)val).getAuthorizationToken());
 				break;
 			}
 //			case authToken : {

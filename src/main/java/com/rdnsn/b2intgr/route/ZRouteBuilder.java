@@ -16,13 +16,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.google.common.collect.ImmutableList;
+import com.rdnsn.b2intgr.api.B2FileListResponse;
+import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
+import com.rdnsn.b2intgr.api.ListFilesRequest;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.http4.HttpMethods;
+import org.apache.camel.component.jackson.JacksonDataFormat;
+import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider;
+
 import org.apache.camel.http.common.HttpOperationFailedException;
+import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
 import org.apache.commons.fileupload.FileItem;
@@ -53,8 +62,8 @@ import com.rdnsn.b2intgr.processor.UploadProcessor;
  */
 public class ZRouteBuilder extends RouteBuilder {
 
-	public static final String HTTP4_PARAMS = 	"?throwExceptionOnFailure=true";
-	//	 + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true&disableStreamCache=true";;
+	public static final String HTTP4_PARAMS = "?throwExceptionOnFailure=true&okStatusCodeRange=100-999";
+	//	 + "&okStatusCodeRange=100-999&throwExceptionOnFailure=true&disableStreamCache=true";;
 
 	private Logger log = LoggerFactory.getLogger(getClass());
 
@@ -63,13 +72,20 @@ public class ZRouteBuilder extends RouteBuilder {
 	private final AuthAgent authAgent;
 	// private final JsonDataFormat jsonUploadAuthFormat;
 
+    final JacksonJaxbJsonProvider jsonProvider = new JacksonJaxbJsonProvider();
+
 	public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent)
 			throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
 		this.objectMapper = objectMapper;
 		this.serviceConfig = serviceConfig;
 		this.authAgent = authAgent;
-		// this.jsonUploadAuthFormat = new JsonDataFormat(JsonLibrary.Jackson);
+        JacksonDataFormat UploadUrlResponseFormat = new JacksonDataFormat(GetUploadUrlResponse.class);
+        JacksonDataFormat UploadFileResponseFormat = new JacksonDataFormat(GetUploadUrlResponse.class);
+        JacksonDataFormat AuthResponseFormat = new JacksonDataFormat(AuthResponse.class);
+
+        // this.jsonUploadAuthFormat = new JsonDataFormat(JsonLibrary.Jackson);
+//		JacksonDataFormat formatAcc = new JsonDataFormat(GetUploadUrlResponse.class);
 		// jsonUploadAuthFormat.setUnmarshalType(GetUploadUrlResponse.class);
 		// enable Jackson json type converter
 		getContext().getGlobalOptions().put("CamelJacksonEnableTypeConverter", "true");
@@ -108,13 +124,17 @@ public class ZRouteBuilder extends RouteBuilder {
 		
 		// Authenticate
 		from("direct:auth")
-			.enrich("bean:authAgent?method=getRemoteAuth", authAgent)
+			.enrich("bean:authAgent?method=getAuthResponse", authAgent)
 		.end();
 
 		// Replies -> List of buckets
 		from("direct:rest.list_buckets")
-			.to("direct:auth")
-			.to("direct:listdir")
+			.to("direct:auth", "direct:list_buckets")
+		.end();
+
+		// Replies -> List Files in base bucket
+		from("direct:rest.list_files")
+			.to("direct:auth", "direct:list_files")
 		.end();
 
 		// Replies -> HREF to resource
@@ -129,11 +149,6 @@ public class ZRouteBuilder extends RouteBuilder {
 		from("direct:b2upload").routeId("upload_facade")
 			.to("direct:auth")
 			.split( new ListSplitExpression())
-			.process(exchange -> {
-				UserFile uf = exchange.getIn().getBody(UserFile.class);
-				exchange.getIn().setBody(null);
-				exchange.getIn().setHeader(Constants.USER_FILE, uf);
-			})
 			.to("vm:sub")
 		.end();
 
@@ -142,62 +157,92 @@ public class ZRouteBuilder extends RouteBuilder {
 			.to("direct:b2send")
 		.end();
 		
-		from("direct:b2send").routeId("atomicupload")
+		from("direct:b2send").routeId("atomic_upload")
 			.errorHandler(noErrorHandler())
-			.choice()
-				.when(header(Exchange.REDELIVERY_COUNTER).isGreaterThanOrEqualTo(0))
-					.log("\"Redelivery\": { \"count\" : ${header.CamelRedeliveryCounter} }")
-				.otherwise()
-					.log("\"Start Upload\"")
-			.end()
 			.process(new UploadProcessor(serviceConfig, objectMapper))
 		.end();
 
-		from("direct:listdir")
-			.process(new Processor() {
+		from("direct:list_buckets")
+            .process(createPost())
+            .enrich(
+                getHttp4Proto(authAgent.getApiUrl() + "/b2api/v1/b2_list_buckets" + ZRouteBuilder.HTTP4_PARAMS),
+                (Exchange original, Exchange resource) -> {
+                    String json = resource.getIn().getBody(String.class);
+                    original.getIn().copyFromWithNewBody(resource.getIn(), json);
+                    System.err.println(resource.getIn().getHeaders());
+                    return original;
+                }
+            )
+			.end();
 
-			@Override
-			public void process(Exchange exchange) throws Exception {
-				final AuthResponse authBody = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
-				exchange.getOut().copyFrom(exchange.getIn());
+        from("direct:list_files")
+            .process( exchange -> {
+                final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
+//                Object lfr = exchange.getIn().getBody();
+//                String delimiter = URLDecoder.decode(exchange.getIn().getHeader(Constants.DIR_PATH, String.class), Constants.UTF_8);
+                ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
+                lfr.setBucketId(serviceConfig.getRemoteBucketId());
+                exchange.getIn().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
+                exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+                exchange.getIn().setBody(lfr);
+            }).marshal().json(JsonLibrary.Jackson)
+//                .process( exchange -> { System.err.println("in: " + exchange.getIn().getBody(String.class));})
+            .enrich(
+                getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_list_file_names" + ZRouteBuilder.HTTP4_PARAMS,
+                (Exchange original, Exchange resource) -> {
+                    if (resource == null) return original;
+                    System.err.println(resource.getIn().getHeaders());
+//                    System.err.println(resource.getIn().getBody(String.class));
 
-				ProducerTemplate producer = getContext().createProducerTemplate();
-				
-				final Message responseOut = producer.send(
-					getHttp4Proto(authBody.getApiUrl() + "/b2api/v1/b2_list_buckets"), innerExchg -> {
-						innerExchg.getIn().setBody(objectMapper.writeValueAsString(
-								ImmutableMap.of("accountId", authBody.getAccountId(), "bucketTypes", new ArrayList<String>() {
-									{
-										add("allPrivate");
-										add("allPublic");
-									}
-								})));
-						innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authBody.getAuthorizationToken());
-					}
-				).getOut();
-				
-				int responseCode = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-				producer.stop();
+//                    Object out = original.getOut().getBody();
+//                    System.err.println("out: " + out);
+//                    System.err.println("in: " + resource.getIn().getBody(String.class));
 
-				exchange.getOut().setBody(responseOut.getBody(String.class));
-				log.debug("inner responseCode " + responseCode);
-			}
-
-		});
+                    try {
+                        B2FileListResponse re = objectMapper.readValue(resource.getIn().getBody(String.class), B2FileListResponse.class);
+                        original.getOut().setBody(re);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+//                    B2FileListResponse lfr = resource.getIn().getBody(B2FileListResponse.class);
+                    return original;
+                }
+        ).outputType(B2FileListResponse.class)
+        .end();
 
 	}
 
-	private Processor replyProxyUrls() {
+    private Processor createPost() {
+
+        return new Processor() {
+
+            @Override
+            public void process(Exchange exchange) throws IOException {
+
+                final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
+                exchange.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
+                exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+                exchange.getOut().setBody(objectMapper.writeValueAsString(ImmutableMap.of(
+                "accountId", auth.getAccountId(),
+                "bucketTypes", ImmutableList.of("allPrivate", "allPublic")
+                )));
+            }
+        };
+    }
+
+    private Processor replyProxyUrls() {
 		return new Processor() {
-			
+
 			@Override
 			public void process(Exchange exchange) throws IOException {
 
 				UploadData obj = exchange.getIn().getBody(UploadData.class);
 				String sjson = objectMapper.writeValueAsString(
 					obj.getFiles().stream().collect(Collectors.toMap((UserFile x) -> {
-						return x.getFilepath().toUri().toString().replaceFirst("file://" + serviceConfig.getDocRoot(),
-								serviceConfig.getProtocol() + "://" + serviceConfig.getHost());
+						return x.getFilepath().toUri().toString().replaceFirst(
+                        "file://" + serviceConfig.getDocRoot(),
+                        serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+                        );
 					}, uf -> uf.getName()))
 				);
 				exchange.getOut().setBody(sjson);
@@ -214,20 +259,36 @@ public class ZRouteBuilder extends RouteBuilder {
 				.dataFormatProperty("prettyPrint", "true").componentProperty("chunked", "true");
 
 		return rest(serviceConfig.getContextUri()).produces("application/json")
-				// Upload a File
-				.post("/{destDir}/upload").bindingMode(RestBindingMode.off)
-				.consumes("multipart/form-data")
-				.produces("application/json")
-				.to("direct:rest.upload")
 
-				// Update a File
-				// .put("/mod/{filePath}").to("direct:putFile")
 
-				// List Buckets
-				.get("/ls")
+            // Upload a File
+            .post("/{destDir}/upload")
+                .bindingMode(RestBindingMode.off)
+                .consumes("multipart/form-data")
+                .produces("application/json")
+                .to("direct:rest.upload")
+
+            // Update a File objectMapper.readValue(
+            // .put("/mod/{filePath}").to("direct:putFile")
+
+            // List Buckets
+            .get("/list")
+            .bindingMode(RestBindingMode.off)
+            .produces("application/json")
+            .to("direct:rest.list_buckets")
+
+
+				// List Files
+				.post("/ls").type(ListFilesRequest.class)
 				.bindingMode(RestBindingMode.auto)
 				.produces("application/json")
-				.to("direct:rest.list_buckets")
+				.to("direct:rest.list_files")
+
+				// List Buckets
+//				.get("/ls/{path}")
+//				.bindingMode(RestBindingMode.off)
+//				.produces("application/json")
+//				.to("direct:rest.list_files")
 
 		// List Directory
 		// .get("/ls/{dirPath}").to("direct:rest.lsdir")
@@ -252,8 +313,7 @@ public class ZRouteBuilder extends RouteBuilder {
 			InputRepresentation representation = new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
 
 			try {
-				String contextId = null;
-				contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8)
+				String contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8)
 						.replaceAll(serviceConfig.getCustomSeparator(), "/");
 
 				String destDirBase = serviceConfig.getDocRoot() + File.separatorChar + contextId;

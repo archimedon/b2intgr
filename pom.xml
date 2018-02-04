@@ -149,6 +149,11 @@
 		</dependency>
 
 		<dependency>
+			<groupId>org.apache.camel</groupId>
+			<artifactId>camel-jackson</artifactId>
+		</dependency>
+
+		<dependency>
 		    <groupId>commons-fileupload</groupId>
 		    <artifactId>commons-fileupload</artifactId>
 			<version>1.3.3</version>
@@ -158,7 +163,14 @@
 		    <groupId>org.restlet</groupId>
 		    <artifactId>org.restlet.ext.fileupload</artifactId>
 		    <version>2.0-M3</version>
+            <!--<version>3.0-M1</version>-->
 		</dependency>
+        <!-- https://mvnrepository.com/artifact/org.restlet.jee/org.restlet.ext.jackson -->
+        <dependency>
+            <groupId>org.restlet.jee</groupId>
+            <artifactId>org.restlet.ext.jackson</artifactId>
+            <version>3.0-M1</version>
+        </dependency>
 
 		<dependency>
 			<groupId>org.apache.camel</groupId>
@@ -170,10 +182,10 @@
 			<artifactId>camel-jms</artifactId>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.camel</groupId>
-			<artifactId>camel-spring</artifactId>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.apache.camel</groupId>-->
+			<!--<artifactId>camel-spring</artifactId>-->
+		<!--</dependency>-->
 
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
@@ -195,10 +207,10 @@
 			<artifactId>activemq-broker</artifactId>
 		</dependency>
 
-		<dependency>
-			<groupId>org.apache.activemq</groupId>
-			<artifactId>activemq-spring</artifactId>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.apache.activemq</groupId>-->
+			<!--<artifactId>activemq-spring</artifactId>-->
+		<!--</dependency>-->
 
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
@@ -225,10 +237,10 @@
 			<groupId>org.apache.xbean</groupId>
 			<artifactId>xbean-spring</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>org.springframework</groupId>
-			<artifactId>spring-context</artifactId>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.springframework</groupId>-->
+			<!--<artifactId>spring-context</artifactId>-->
+		<!--</dependency>-->
 <!-- 
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
@@ -288,29 +300,30 @@
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-annotations</artifactId>
     </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-    </dependency>
+    <!--<dependency>-->
+      <!--<groupId>com.fasterxml.jackson.core</groupId>-->
+      <!--<artifactId>jackson-core</artifactId>-->
+    <!--</dependency>-->
+    <!--<dependency>-->
+      <!--<groupId>com.fasterxml.jackson.core</groupId>-->
+      <!--<artifactId>jackson-databind</artifactId>-->
+    <!--</dependency>-->
+
     <!-- json schema -->
-    <dependency>
-      <groupId>com.fasterxml.jackson.jaxrs</groupId>
-      <artifactId>jackson-jaxrs-json-provider</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.module</groupId>
-      <artifactId>jackson-module-jsonSchema</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>javax.validation</groupId>
-          <artifactId>validation-api</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
+    <!--<dependency>-->
+      <!--<groupId>com.fasterxml.jackson.jaxrs</groupId>-->
+      <!--<artifactId>jackson-jaxrs-json-provider</artifactId>-->
+    <!--</dependency>-->
+    <!--<dependency>-->
+      <!--<groupId>com.fasterxml.jackson.module</groupId>-->
+      <!--<artifactId>jackson-module-jsonSchema</artifactId>-->
+      <!--<exclusions>-->
+        <!--<exclusion>-->
+          <!--<groupId>javax.validation</groupId>-->
+          <!--<artifactId>validation-api</artifactId>-->
+        <!--</exclusion>-->
+      <!--</exclusions>-->
+    <!--</dependency>-->
  
 	</dependencies>
 

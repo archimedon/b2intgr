@@ -13,85 +13,95 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AuthResponse extends B2ResponseBase {
-	
-	@JsonProperty
-	private Integer absoluteMinimumPartSize;
-		
-	@JsonProperty
-	private String accountId;
-	
-	@JsonProperty
-	private String apiUrl;
-	
-	@JsonProperty
-	private String authorizationToken;
-	
-	@JsonProperty
-	private String downloadUrl;
-	
-	@JsonProperty
-	private Integer minimumPartSize;
-	
-	@JsonProperty
-	private Integer recommendedPartSize;
 
-	public Integer getAbsoluteMinimumPartSize() {
-		return absoluteMinimumPartSize;
-	}
+    @JsonProperty
+    private Integer absoluteMinimumPartSize;
 
-	public void setAbsoluteMinimumPartSize(Integer absoluteMinimumPartSize) {
-		this.absoluteMinimumPartSize = absoluteMinimumPartSize;
-	}
+    @JsonProperty
+    private String accountId;
 
-	public String getAccountId() {
-		return accountId;
-	}
+    @JsonProperty
+    private String apiUrl;
 
-	public void setAccountId(String accountId) {
-		this.accountId = accountId;
-	}
+    @JsonProperty
+    private String authorizationToken;
 
-	public String getApiUrl() {
-		return apiUrl;
-	}
+    @JsonProperty
+    private String downloadUrl;
 
-	public void setApiUrl(String apiUrl) {
-		this.apiUrl = apiUrl;
-	}
+    @JsonProperty
+    private Integer minimumPartSize;
 
-	public String getAuthorizationToken() {
-		return authorizationToken;
-	}
+    @JsonProperty
+    private Integer recommendedPartSize;
 
-	public void setAuthorizationToken(String authorizationToken) {
-		this.authorizationToken = authorizationToken;
-	}
+    private long lastmod = 0;
 
-	public String getDownloadUrl() {
-		return downloadUrl;
-	}
+    public Integer getAbsoluteMinimumPartSize() {
+        return absoluteMinimumPartSize;
+    }
 
-	public void setDownloadUrl(String downloadUrl) {
-		this.downloadUrl = downloadUrl;
-	}
+    public void setAbsoluteMinimumPartSize(Integer absoluteMinimumPartSize) {
+        this.absoluteMinimumPartSize = absoluteMinimumPartSize;
+    }
 
-	public Integer getMinimumPartSize() {
-		return minimumPartSize;
-	}
+    public AuthResponse() {
+        this.setLastmod(new Date().getTime() / 1000);
+    }
 
-	public void setMinimumPartSize(Integer minimumPartSize) {
-		this.minimumPartSize = minimumPartSize;
-	}
+    public long getLastmod() {  return lastmod; }
 
-	public Integer getRecommendedPartSize() {
-		return recommendedPartSize;
-	}
+    private void setLastmod(long lastmod) { this.lastmod = lastmod; }
 
-	public void setRecommendedPartSize(Integer recommendedPartSize) {
-		this.recommendedPartSize = recommendedPartSize;
-	}
+    public String getAccountId() {
+        return accountId;
+    }
 
-	public String resolveGetUploadUrl() {
-		return apiUrl + "/b2api/v1/b2_get_upload_url";
-	}
+    public void setAccountId(String accountId) {
+        this.accountId = accountId;
+    }
+
+    public String getApiUrl() {
+        return apiUrl;
+    }
+
+    public void setApiUrl(String apiUrl) {
+        this.apiUrl = apiUrl;
+    }
+
+    public String getAuthorizationToken() {
+        return authorizationToken;
+    }
+
+    public void setAuthorizationToken(String authorizationToken) {
+        this.authorizationToken = authorizationToken;
+    }
+
+    public String getDownloadUrl() {
+        return downloadUrl;
+    }
+
+    public void setDownloadUrl(String downloadUrl) {
+        this.downloadUrl = downloadUrl;
+    }
+
+    public Integer getMinimumPartSize() {
+        return minimumPartSize;
+    }
+
+    public void setMinimumPartSize(Integer minimumPartSize) {
+        this.minimumPartSize = minimumPartSize;
+    }
+
+    public Integer getRecommendedPartSize() {
+        return recommendedPartSize;
+    }
+
+    public void setRecommendedPartSize(Integer recommendedPartSize) {
+        this.recommendedPartSize = recommendedPartSize;
+    }
+
+    public String resolveGetUploadUrl() {
+        return apiUrl + "/b2api/v1/b2_get_upload_url";
+    }
 }

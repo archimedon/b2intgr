@@ -17,6 +17,7 @@ import org.apache.camel.Message;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.http4.HttpMethods;
 import org.apache.commons.beanutils.BeanUtils;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +58,7 @@ public class UploadProcessor extends BaseProcessor {
 	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authdUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
 
 		return objectMapper.readValue(producer.send(getHttp4Proto(authdUploadUrl) + ZRouteBuilder.HTTP4_PARAMS, innerExchg -> {
-			innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, "POST");
+			innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
 			innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
 			innerExchg.getIn().setBody(this.bucketMap);
 		}).getOut().getBody(String.class), GetUploadUrlResponse.class);				
@@ -66,11 +67,10 @@ public class UploadProcessor extends BaseProcessor {
 	@Override
 	public void process(Exchange exchange) throws Exception {
 		
-		final UserFile userFile = exchange.getIn().getHeader(Constants.USER_FILE, UserFile.class);
+		final UserFile userFile = exchange.getIn().getBody(UserFile.class);
 		final AuthResponse remoteAuth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
 
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
-		
 		final GetUploadUrlResponse uploadAuth =
 				doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
 		
@@ -83,16 +83,15 @@ public class UploadProcessor extends BaseProcessor {
 			final Message postMessage = innerExchg.getIn();
 			postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
 			
-			log.info("\"Upload\":{ \"xBzFileName\": \"{}\"}", userFile.getName());
+			log.info("\"Upload\":{ \"{}\": \"{}\"}", Constants.X_BZ_FILE_NAME, userFile.getName());
 			
 			postMessage.setHeader(Constants.X_BZ_FILE_NAME, userFile.getName());
 			
 			String sha1 = sha1(file);
-			if (log.isDebugEnabled()) {
-				corruptSomeHashes(sha1, exchange, file);
-			}
+//			if (log.isDebugEnabled()) {
+//				corruptSomeHashes(sha1, exchange, file);
+//			}
 			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, sha1);
-			
 			postMessage.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
 			postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
 			postMessage.setHeader(Constants.AUTHORIZATION, uploadAuth.getAuthorizationToken());
@@ -106,7 +105,7 @@ public class UploadProcessor extends BaseProcessor {
 
 		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getName());
 
-		if (code != null && code == 200) {
+		if (HttpStatus.SC_OK == code) {
 			final String downloadUrl =  String.format("%s/file/%s/%s",
 					remoteAuth.getDownloadUrl(), serviceConfig.getRemoteStorageConf().getBucketName(), userFile.getName());
 			
@@ -121,10 +120,18 @@ public class UploadProcessor extends BaseProcessor {
 			}
 		}
 		else {
-			throw new UploadException("Response code not OK (" + code + ") File '" + userFile.getName() +"' not uploaded" );
+			throw new UploadException("Response code fail (" + code + ") File '" + userFile.getName() +"' not uploaded" );
 		}
 	}
 
+	/**
+	 * Only used in testing. To force an error response from Backblaze.
+	 * Triggered by file names that start with 4 numbers
+	 *
+	 * @param sha1
+	 * @param exchange
+	 * @param file
+	 */
 	private void corruptSomeHashes(String sha1, Exchange exchange, File file) {
 		
 		if (Pattern.matches("^[\\d{3}\\d+].*" , file.getName())

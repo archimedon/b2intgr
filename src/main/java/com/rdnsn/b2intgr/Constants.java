@@ -16,5 +16,7 @@ public interface Constants {
 
 	public String DOWNLOAD_URL = "downloadUrl";
 	public String TRNSNT_FILE_DESTDIR = "destDir";
-	
+
+	public long B2_TOKEN_TTL = (24 * 60 * 60) - 10;
+	public String DIR_PATH = "path";
 }

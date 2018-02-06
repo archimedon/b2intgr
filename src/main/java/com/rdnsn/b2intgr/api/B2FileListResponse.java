@@ -19,21 +19,22 @@ public class B2FileListResponse extends B2ResponseBase {
     @JsonProperty
     private String nextFileName;
 
-
     public List<B2File> getFiles() {
         return files;
     }
 
-    public void setFiles(List<B2File> files) {
+    public B2FileListResponse setFiles(List<B2File> files) {
         this.files = files;
+        return this;
     }
 
     public String getNextFileName() {
         return nextFileName;
     }
 
-    public void setNextFileName(String nextFileName) {
+    public B2FileListResponse setNextFileName(String nextFileName) {
         this.nextFileName = nextFileName;
+        return this;
     }
 }
 

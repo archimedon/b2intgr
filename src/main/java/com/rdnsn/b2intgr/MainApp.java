@@ -50,7 +50,7 @@ public class MainApp {
 
         jndiContext.bind("authAgent", authAgent);
         jndiContext.bind("makeRes", (AggregationStrategy)(Exchange original, Exchange resource) -> {
-            if (resource != null) {  original.getOut().copyFrom(resource.getIn()); }
+            if (resource != null) { original.getOut().copyFrom(resource.getIn()); }
             return original;
         });
 

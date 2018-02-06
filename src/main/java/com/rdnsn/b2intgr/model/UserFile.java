@@ -13,7 +13,7 @@ import com.google.common.collect.ImmutableMap;
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class UserFile implements Comparable<UserFile> {
+public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 	
 	@JsonProperty
 	private Path filepath;

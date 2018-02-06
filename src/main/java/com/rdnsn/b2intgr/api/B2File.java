@@ -34,64 +34,71 @@ public class B2File {
     @JsonProperty
     private long uploadTimestamp;
 
-    public String getAction() {
-        return action;
-    }
-
-    public void setAction(String action) {
-        this.action = action;
-    }
-
     public String getContentType() {
         return contentType;
     }
 
-    public void setContentType(String contentType) {
+    public B2File setContentType(String contentType) {
         this.contentType = contentType;
+        return this;
+    }
+
+    public String getAction() {
+        return action;
+    }
+
+    public B2File setAction(String action) {
+        this.action = action;
+        return this;
     }
 
     public String getFileId() {
         return fileId;
     }
 
-    public void setFileId(String fileId) {
+    public B2File setFileId(String fileId) {
         this.fileId = fileId;
+        return this;
     }
 
     public String getAuthor() {
         return author;
     }
 
-    // "fileInfo": { "author": "unknown"},
-    @JsonProperty(value="fileInfo", access=JsonProperty.Access.WRITE_ONLY)
-    public void setAuthor(Map<String, String> fileInfo) {
-        if (fileInfo != null) {
-            this.author = fileInfo.get("author");
-        }
-    }
-
     public String getFileName() {
         return fileName;
     }
 
-    public void setFileName(String fileName) {
+    public B2File setFileName(String fileName) {
         this.fileName = fileName;
+        return this;
     }
 
     public long getSize() {
         return size;
     }
 
-    public void setSize(long size) {
+    public B2File setSize(long size) {
         this.size = size;
+        return this;
     }
 
     public long getUploadTimestamp() {
         return uploadTimestamp;
     }
 
-    public void setUploadTimestamp(long uploadTimestamp) {
+    public B2File setUploadTimestamp(long uploadTimestamp) {
         this.uploadTimestamp = uploadTimestamp;
+        return this;
+    }
+
+    // "fileInfo": { "author": "unknown"},
+    @JsonProperty(value="fileInfo", access=JsonProperty.Access.WRITE_ONLY)
+    public B2File setAuthor(Map<String, String> fileInfo) {
+        if (fileInfo != null) {
+            this.author = fileInfo.get("author");
+        }
+        return this;
     }
 
     public String toString() {

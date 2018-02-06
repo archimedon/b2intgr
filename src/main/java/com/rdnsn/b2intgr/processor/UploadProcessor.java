@@ -92,13 +92,14 @@ public class UploadProcessor extends BaseProcessor {
 //				corruptSomeHashes(sha1, exchange, file);
 //			}
 			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, sha1);
+
 			postMessage.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
 			postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
 			postMessage.setHeader(Constants.AUTHORIZATION, uploadAuth.getAuthorizationToken());
 			postMessage.setHeader(Constants.X_BZ_INFO_AUTHOR, "unknown");
 			postMessage.setBody(file);
 		}).getOut();
-		
+
 		producer.stop();
 		final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 		final String response = responseOut.getBody(String.class);

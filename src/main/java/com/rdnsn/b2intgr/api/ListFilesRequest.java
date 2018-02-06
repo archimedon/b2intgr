@@ -10,10 +10,6 @@ import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ListFilesRequest {
 
-//    @JsonProperty(access=JsonProperty.Access.WRITE_ONLY)
-//    //JsonProperty
-//    private String nextFileName = null;
-
     @JsonProperty
     private Integer maxFileCount = 100;
 
@@ -29,56 +25,53 @@ public class ListFilesRequest {
     @JsonProperty
     private String bucketId;
 
-    public  ListFilesRequest() {
+    public ListFilesRequest() {
         super();
-    }
-
-//    public String getNextFileName() {
-//        return nextFileName;
-//    }
-
-    public String getBucketId() {
-        return bucketId;
-    }
-
-    public void setBucketId(String bucketId) {
-        this.bucketId = bucketId;
-    }
-
-//    public void setNextFileName(String nextFileName) {
-//        this.nextFileName = nextFileName;
-//    }
-
-    public String getStartFileName() {
-        return startFileName;
-    }
-
-    public void setStartFileName(String startFileName) {
-        this.startFileName = startFileName;
     }
 
     public Integer getMaxFileCount() {
         return maxFileCount;
     }
 
-    public void setMaxFileCount(Integer maxFileCount) {
+    public ListFilesRequest setMaxFileCount(Integer maxFileCount) {
         this.maxFileCount = maxFileCount;
+        return this;
     }
 
     public String getPrefix() {
         return prefix;
     }
 
-    public void setPrefix(String prefix) {
+    public ListFilesRequest setPrefix(String prefix) {
         this.prefix = prefix;
+        return this;
     }
 
     public String getDelimiter() {
         return delimiter;
     }
 
-    public void setDelimiter(String delimiter) {
+    public ListFilesRequest setDelimiter(String delimiter) {
         this.delimiter = delimiter;
+        return this;
+    }
+
+    public String getStartFileName() {
+        return startFileName;
+    }
+
+    public ListFilesRequest setStartFileName(String startFileName) {
+        this.startFileName = startFileName;
+        return this;
+    }
+
+    public String getBucketId() {
+        return bucketId;
+    }
+
+    public ListFilesRequest setBucketId(String bucketId) {
+        this.bucketId = bucketId;
+        return this;
     }
 
     @Override

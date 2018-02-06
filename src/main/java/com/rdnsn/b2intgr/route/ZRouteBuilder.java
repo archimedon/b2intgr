@@ -2,10 +2,7 @@ package com.rdnsn.b2intgr.route;
 
 import static com.rdnsn.b2intgr.RemoteStorageConfiguration.getHttp4Proto;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.file.Files;
@@ -36,7 +33,14 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
@@ -199,14 +203,22 @@ public class ZRouteBuilder extends RouteBuilder {
         ) //.marshal().json(JsonLibrary.Jackson)
         .end();
 
-        from("direct:rm_files")
+        from("direct:rm_files").marshal().json(JsonLibrary.Jackson, DeleteFilesRequest.class) //.inputType(DeleteFilesRequest.class)
 //            .outputType(DeleteFile.class)
             .split( new Expression () {
                 @Override
                 @SuppressWarnings("unchecked")
                 public <T> T evaluate(Exchange exchange, Class<T> type) {
-                    DeleteFilesRequest body = exchange.getIn().getBody(DeleteFilesRequest.class);
                     Message IN = exchange.getIn();
+
+//                    DeleteFilesRequest body = exchange.getIn().getBody(DeleteFilesRequest.class);
+                    DeleteFilesRequest body = null;
+                    try {
+                        body = objectMapper.readValue(IN.getBody(String.class), DeleteFilesRequest.class);
+                        log.debug("body.getFiles(): {} ", body.getFiles());
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
                     IN.removeHeader("authResponse");
                     return (T) body.getFiles().iterator();
@@ -219,32 +231,34 @@ public class ZRouteBuilder extends RouteBuilder {
 //        .threads(2, 2)
 //                .to(getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_delete_file_version" + "?throwExceptionOnFailure=true")
                 .process(exchange -> {
-                    String json = "empty";
-                ProducerTemplate producer = exchange.getContext().createProducerTemplate();
-                try {
 
-                    Message responseOut = producer.send(getHttp4Proto(authAgent.getApiUrl())
-                                    + "/b2api/v1/b2_delete_file_version" + "?throwExceptionOnFailure=true&okStatusCodeRange=100-999",
-                            innerExchg -> {
-                                final Message postMessage = innerExchg.getIn();
-                                postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-                                postMessage.setHeader(Constants.AUTHORIZATION, exchange.getIn().getHeader(Constants.AUTHORIZATION, String.class));
-                                postMessage.setBody(exchange.getIn().getBody(String.class));
-                            }).getOut();
+                    String fileDesc = exchange.getIn().getBody(String.class);
+                    log.debug("fileDesc {} " + fileDesc);
 
-                    final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-                    log.info("Completed: '{}'", code);
-                    json = responseOut.getBody(String.class);
-                    analyze(responseOut.getExchange());
+                    String json = "Failed";
 
-                }
-                catch (Exception e){
+//                    try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
+//                        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+//                        HttpPost httpPost = new HttpPost(authAgent.getApiUrl() + "/b2api/v1/b2_delete_file_version");
+//                        httpPost.setHeader(Constants.AUTHORIZATION, exchange.getIn().getHeader(Constants.AUTHORIZATION, String.class));
+//                        httpPost.setHeader("Content-type", "application/json");
+//                        httpPost.setEntity(new StringEntity(fileDesc));
+//
+//                        CloseableHttpResponse response = httpclient.execute(httpPost);
+//
+//                        response.getEntity().writeTo(buf);
+//                        json = buf.toString(Constants.UTF_8);
+//
+//                        log.info("StatusLine: {}", response.getStatusLine());
+//
+//                        log.info("json :{}", json);
+//
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
 
-                    log.debug("json: {}", json);
-                    log.debug("err: {}", e);
-                } finally {
-                }
-                producer.stop();
+                    exchange.getIn().setBody(json);
+                    exchange.getOut().setBody(json);
 //                    if (HttpStatus.SC_OK == code) {
 //                        }
 
@@ -390,8 +404,9 @@ public class ZRouteBuilder extends RouteBuilder {
 				.produces("application/json")
 				.to("direct:rest.list_files")
 
-            .delete("/rm").type(DeleteFilesRequest.class)
+            .delete("/rm") //.type(DeleteFilesRequest.class)
 				.bindingMode(RestBindingMode.auto)
+//                .produces("text/plain")
 				.produces("application/json")
 				.to("direct:rest.rm_files")
 

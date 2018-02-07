@@ -3,14 +3,16 @@ package com.rdnsn.b2intgr.route;
 import static com.rdnsn.b2intgr.RemoteStorageConfiguration.getHttp4Proto;
 
 import java.io.*;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
@@ -19,28 +21,20 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
-import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.http4.HttpMethods;
 import org.apache.camel.component.jackson.JacksonDataFormat;
-import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider;
 
-import org.apache.camel.http.common.HttpOperationFailedException;
 import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
+import org.apache.commons.beanutils.BeanUtils;
+import org.apache.commons.beanutils.BeanUtilsBean;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
@@ -72,8 +66,9 @@ public class ZRouteBuilder extends RouteBuilder {
 	private final CloudFSConfiguration serviceConfig;
 	private final ObjectMapper objectMapper;
 	private final AuthAgent authAgent;
+    private String ppath_delete_files = "/b2api/v1/b2_delete_file_version" + "?throwExceptionOnFailure=false&okStatusCodeRange=100-999";
 
-	public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent)
+    public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent)
 			throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
 		super();
 		this.objectMapper = objectMapper;
@@ -150,7 +145,6 @@ public class ZRouteBuilder extends RouteBuilder {
 		from("direct:b2upload").routeId("upload_facade")
 			.to("direct:auth")
 			.split( new ListSplitExpression())
-//			.to("vm:sub?concurrentConsumers=5")
 			.to("vm:sub")
 		.end();
 
@@ -185,162 +179,91 @@ public class ZRouteBuilder extends RouteBuilder {
                 exchange.getIn().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
                 exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
                 exchange.getIn().setBody(lfr);
-            }).marshal().json(JsonLibrary.Jackson)
-//                .process( exchange -> { System.err.println("in: " + exchange.getIn().getBody(String.class));})
+            })
+            .marshal().json(JsonLibrary.Jackson)
             .enrich(
-                getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_list_file_names" + ZRouteBuilder.HTTP4_PARAMS,
-                (Exchange original, Exchange resource) -> {
-                    if (resource == null) return original;
-                    System.err.println(resource.getIn().getHeaders());
-                    try {
-                        B2FileListResponse re = objectMapper.readValue(resource.getIn().getBody(String.class), B2FileListResponse.class);
-                        original.getOut().setBody(re);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                    return original;
-                }
-        ) //.marshal().json(JsonLibrary.Jackson)
+            getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_list_file_names" + ZRouteBuilder.HTTP4_PARAMS,
+            (Exchange original, Exchange resource) -> {
+                log.debug("resource.getIn().getHeaders(): {} ", resource.getIn().getHeaders());
+                original.getOut().setBody(coerceClass(resource.getIn(), B2FileListResponse.class));
+                return original;
+            })
+            //.marshal().json(JsonLibrary.Jackson)
         .end();
 
         from("direct:rm_files")
-//                .marshal().json(JsonLibrary.Jackson, DeleteFilesRequest.class)
-                //.inputType(DeleteFilesRequest.class)
-//            .outputType(DeleteFile.class)
-            .split( new Expression () {
+            .split(new Expression () {
                 @Override
                 @SuppressWarnings("unchecked")
                 public <T> T evaluate(Exchange exchange, Class<T> type) {
                     Message IN = exchange.getIn();
-
                     DeleteFilesRequest body = exchange.getIn().getBody(DeleteFilesRequest.class);
-//                    DeleteFilesRequest body = null;
-//                    try {
-//                        body = objectMapper.readValue(IN.getBody(String.class), DeleteFilesRequest.class);
-//                    } catch (IOException e) {
-//                        e.printStackTrace();
-//                    }
-                    log.debug("body.getFiles(): {} ", body.getFiles());
+                    IN.setHeader("DeleteFilesRequest", body);
                     IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
                     IN.removeHeader("authResponse");
                     return (T) body.getFiles().iterator();
                 }
-            }, (Exchange oldExchange, Exchange newExchange) -> {
-                Message newIn = newExchange.getIn();
-                Object newBody = newIn.getBody();
-                ArrayList list = null;
-                if (oldExchange == null) {
-                    list = new ArrayList();
-                    list.add(newBody);
-                    newIn.setBody(list);
-                    return newExchange;
-                } else {
-                    Message in = oldExchange.getIn();
-                    list = in.getBody(ArrayList.class);
-                    list.add(newBody);
-                    return oldExchange;
-                }
             })
-                .to("vm:delete")
-                .end();
+            .to("vm:delete")
+        .end();
 
-        from("vm:delete").marshal().json(JsonLibrary.Jackson)
-//        .threads(2, 2)
-//                .to(getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_delete_file_version" + "?throwExceptionOnFailure=true")
-                .process(exchange -> {
+        from("vm:delete")
+            .marshal().json(JsonLibrary.Jackson)
+            .threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
+            .enrich(
+                getHttp4Proto(authAgent.getApiUrl()) + ppath_delete_files,
+                (Exchange original, Exchange resource) -> {
+                    DeleteFile delFile = coerceClass(resource.getIn(), DeleteFile.class);
+                    DeleteFilesResponse delResp = null;
 
-                    String fileDesc = exchange.getIn().getBody(String.class);
-                    log.debug("fileDesc {} " + fileDesc);
+                    if ((delResp = original.getIn().getBody(DeleteFilesResponse.class)) == null) {
+                        DeleteFilesRequest delRequest = (DeleteFilesRequest) original.getIn().removeHeader("DeleteFilesRequest");
 
-                    String json = "Failed";
-
-                    try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
-                        ByteArrayOutputStream buf = new ByteArrayOutputStream();
-                        HttpPost httpPost = new HttpPost(authAgent.getApiUrl() + "/b2api/v1/b2_delete_file_version");
-                        httpPost.setHeader(Constants.AUTHORIZATION, exchange.getIn().getHeader(Constants.AUTHORIZATION, String.class));
-                        httpPost.setHeader("Content-type", "application/json");
-                        httpPost.setEntity(new StringEntity(fileDesc));
-
-                        CloseableHttpResponse response = httpclient.execute(httpPost);
-
-                        response.getEntity().writeTo(buf);
-                        json = buf.toString(Constants.UTF_8);
-
-                        log.info("StatusLine: {}", response.getStatusLine());
-
-                        log.info("json :{}", json);
-
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                        delResp = new DeleteFilesResponse(delRequest.getFiles());
+                        original.getIn().setBody(delResp);
                     }
+                    System.err.println("original.getIn().getHeaders() " + original.getIn().getHeaders());
 
-//                    exchange.getIn().setBody(json);
-                    exchange.getOut().setBody(json);
-//                    if (HttpStatus.SC_OK == code) {
-//                        }
+                    final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
-//                    String json = exchange.getIn().getBody(String.class);
-//                    analyze(exchange);
-//                    exchange.getOut().setBody(json);
-                })
+                    if (HttpStatus.SC_OK != code) {
 
-//                .enrich(
-//                    getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_delete_file_version" +
-//                        "?throwExceptionOnFailure=false&okStatusCodeRange=100-999",
-////                        "?throwExceptionOnFailure=false&okStatusCodeRange=100-999&disableStreamCache=true"
-//
-//                        (Exchange original, Exchange resource) -> {
-////                            if (resource == null) return original;
-//
-//                            String json = resource.getIn().getBody(String.class);
-//
-//                            log.debug("json: {}", json);
-//
-//                            Integer responseCode = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//                            log.debug("responseCode: {}", responseCode);
-////                            original.getOut().copyFromWithNewBody(resource.getIn(), json);
-////                            original.getIn().copyFromWithNewBody(resource.getIn(), json);
-//
-//                            original.getOut().setBody(json);
-//                            original.getIn().setBody(json);
-//
-//                            original.setException(null);
-//                            resource.setException(null);
-//
-////                            HttpOperationFailedException excep = resource.getException(HttpOperationFailedException.class);
-////                            if (excep != null) {
-////                            }
-////
-//
-//                           return original;
-//                        } )
-
-//                .onException(HttpOperationFailedException.class).process(exchange -> {
-//
-//                            String obod = exchange.getOut().getBody(String.class);
-//                            String ibod = exchange.getIn().getBody(String.class);
-//
-//            log.debug("obod: {}", obod);
-//            log.debug("ibod: {}", ibod);
-//
-//            exchange.getOut().setHeader("cause", exchange.getException().getMessage());
-//            exchange.getOut().setBody("oyoyo");
-////            HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
-////            return exe.getStatusCode() > 200;
-//        }).handled(true)
-//                .process(ex -> {
-//                    String json = ex.getIn().getBody(String.class);
-//                    System.err.println("the json: " + json);
-//                    ex.getOut().setBody("yojo");
-//                    ex.getIn().setBody("in - yojo");
-//                })
-                .log("headers: ${headers}")
-//                .log("${body}")
-                .end();
-
-
-
+                        delResp.getFile(extractId(delFile))
+                            .setCode(delFile.getCode())
+                            .setMessage(delFile.getMessage())
+                            .setStatus(delFile.getStatus());
+                    }
+                    return original;
+                }
+            )
+        .end();
 	}
+
+    private String extractId(DeleteFile delFile) {
+	    String id = delFile.getFileId();
+	    if (id == null) {
+            Pattern pattern = Pattern.compile("([^\\s]+)$");
+
+            Matcher matcher = pattern.matcher(delFile.getMessage());
+            System.err.println("delFile.getMessage(): " + delFile.getMessage());
+
+            if (matcher.find()) {
+                id = matcher.group(1);
+            }
+        }
+        return id;
+    }
+
+    //
+    private <T> T coerceClass(Message rsrcIn, Class<T> type) {
+        T obj = null;
+        try {
+            obj = objectMapper.readValue(rsrcIn.getBody(String.class), type);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return obj;
+    }
 
     private void analyze(final Exchange exchange) {
         log.debug("exchange.getException: {}", exchange.getException());
@@ -420,6 +343,12 @@ public class ZRouteBuilder extends RouteBuilder {
 				.bindingMode(RestBindingMode.auto)
 				.produces("application/json")
 				.to("direct:rest.list_files")
+
+//            // List File Versions
+//            .post("/lsvers").type(ListFilesRequest.class)
+//				.bindingMode(RestBindingMode.auto)
+//				.produces("application/json")
+//				.to("direct:rest.list_filevers")
 
             .delete("/rm").type(DeleteFilesRequest.class).outType(String.class)
 				.bindingMode(RestBindingMode.auto)

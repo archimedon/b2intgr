@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -218,6 +219,23 @@ public class ZRouteBuilder extends RouteBuilder {
                     IN.removeHeader("authResponse");
                     return (T) body.getFiles().iterator();
                 }
+            },
+            (Exchange oldExchange, Exchange newExchange) -> {
+                Message newIn = newExchange.getIn();
+                FileResponse newBody = newIn.getBody(FileResponse.class);
+                DeleteFilesResponse respList = null;
+                if (oldExchange == null) {
+                    log.error("Created New DeleteResponse {}", respList);
+                    respList = new DeleteFilesResponse();
+                    respList.updateFile(newBody);
+                    newIn.setBody(respList);
+                    return newExchange;
+                } else {
+                    Message in = oldExchange.getIn();
+                    respList = in.getBody(DeleteFilesResponse.class);
+                    respList.updateFile(newBody);
+                    return oldExchange;
+                }
             })
             .to("vm:delete")
         .end();
@@ -229,43 +247,22 @@ public class ZRouteBuilder extends RouteBuilder {
             .enrich(
                 getHttp4Proto(authAgent.getApiUrl()) + ppath_delete_files,
                 (Exchange original, Exchange resource) -> {
-
-                    DeleteFileResponse delFileResponse = coerceClass(original.getIn(), DeleteFileResponse.class);
-
-//                    log.error(" original.getOut().setBody(: " +  original.getOut().getBody());
-                    log.error(" original.getIn().setBody(: " +  delFileResponse);
-
-                    DeleteFilesResponse respList = original.getOut().getBody(DeleteFilesResponse.class);
-
-                    if ( respList == null ) {
-//                        DeleteFilesRequest delRequest = (DeleteFilesRequest) original.getIn().removeHeader("DeleteFilesRequest");
-//                        delResp = new DeleteFilesResponse(delRequest.getFiles());
-                                respList = new DeleteFilesResponse();
-                        log.error("Created New DeleteResponse");
-                        original.getOut().setBody(respList);
-
-                    }
-
-
+                    ReadsError respData = null;
                     final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//                    FileResponse delFile = null;
+                    FileResponse postedData = coerceClass(original.getIn(), FileResponse.class);
+//                    FileResponse postedData = original.getIn().getBody(FileResponse.class);
+                    log.error("postedData: {} ," , postedData);
+
+
                     if (HttpStatus.SC_OK != code) {
-                        ErrorObject error = coerceClass(resource.getIn(), ErrorObject.class);
-                        delFileResponse.setError(error);
-                        log.debug("error: " + error);
-
-//                        fes.setCode(delFile.getCode())
-//                            .setMessage(delFile.getMessage())
-//                            .setStatus(delFile.getStatus());
+                        respData = coerceClass(resource.getIn(), ErrorObject.class);
+                        log.debug("respData: " + respData);
+                        postedData.setError(respData);
                     }
-                    log.debug("delFileResponse: " + delFileResponse);
-                    respList.updateFile(delFileResponse);
-                    original.getIn().setBody(respList);
-
-                    log.debug("respList: " + respList);
+                    original.getOut().setBody(postedData);
                     return original;
                 }
-            )
+            ).outputType(FileResponse.class)
         .end();
 	}
 
@@ -387,7 +384,8 @@ public class ZRouteBuilder extends RouteBuilder {
 				.produces("application/json")
 				.to("direct:rest.list_filevers")
 
-            .delete("/rm").type(DeleteFilesRequest.class).outType(DeleteFilesResponse.class)
+            .delete("/rm").type(DeleteFilesRequest.class)
+//                .outType(DeleteFilesResponse.class)
 				.bindingMode(RestBindingMode.auto)
 //                .produces("text/plain")
 				.produces("application/json")

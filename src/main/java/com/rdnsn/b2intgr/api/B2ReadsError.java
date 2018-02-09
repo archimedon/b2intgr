@@ -9,13 +9,13 @@ import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 public class B2ReadsError implements ReadsError {
 
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-    protected ErrorObject error = new ErrorObject();
+    protected ReadsError error = new ErrorObject();
 
     public B2ReadsError() {
         super();
     }
 
-    public B2ReadsError setError(ErrorObject error) {
+    public B2ReadsError setError(ReadsError error) {
         this.error = error;
         return this;
     }

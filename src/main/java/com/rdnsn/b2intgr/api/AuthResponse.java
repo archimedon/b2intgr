@@ -2,17 +2,15 @@ package com.rdnsn.b2intgr.api;
 
 import java.util.Date;
 
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class AuthResponse extends B2ResponseBase {
+public class AuthResponse {
 
     @JsonProperty
     private Integer absoluteMinimumPartSize;
@@ -61,9 +59,7 @@ public class AuthResponse extends B2ResponseBase {
         this.accountId = accountId;
     }
 
-    public String getApiUrl() {
-        return apiUrl;
-    }
+    public String getApiUrl() { return apiUrl; }
 
     public void setApiUrl(String apiUrl) {
         this.apiUrl = apiUrl;
@@ -104,4 +100,10 @@ public class AuthResponse extends B2ResponseBase {
     public String resolveGetUploadUrl() {
         return apiUrl + "/b2api/v1/b2_get_upload_url";
     }
+
+    @Override
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this);
+    }
+
 }

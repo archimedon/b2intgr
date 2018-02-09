@@ -22,12 +22,32 @@ import com.rdnsn.b2intgr.route.ZRouteBuilder;
 
 
 /**
- * Main Application
+ * A Camel Application
  */
 public class MainApp {
 
     private final ObjectMapper objectMapper;
     private final CloudFSConfiguration serviceConfig;
+
+    private static long lastmod = 0;
+    //	final private static final long TTL = 10;
+    final private static long TTL = (12 * 60 * 60) - 10;
+
+
+    public boolean isExpired() {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    private boolean noToken(String authorizationToken) {
+        return
+                StringUtils.isBlank(authorizationToken) || (utcInSecs() - lastmod) >= TTL;
+    }
+
+
+    private long utcInSecs() {
+        return new Date().getTime() / 1000;
+    }
 
 
     public MainApp(String configFile) throws IOException {
@@ -50,7 +70,7 @@ public class MainApp {
 
         jndiContext.bind("authAgent", authAgent);
         jndiContext.bind("makeRes", (AggregationStrategy)(Exchange original, Exchange resource) -> {
-            if (resource != null) { original.getOut().copyFrom(resource.getIn()); }
+            if (resource != null) {  original.getOut().copyFrom(resource.getIn()); }
             return original;
         });
 

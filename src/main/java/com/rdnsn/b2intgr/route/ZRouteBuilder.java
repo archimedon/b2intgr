@@ -3,7 +3,6 @@ package com.rdnsn.b2intgr.route;
 import static com.rdnsn.b2intgr.RemoteStorageConfiguration.getHttp4Proto;
 
 import java.io.*;
-import java.lang.reflect.InvocationTargetException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.file.Files;
@@ -28,8 +27,6 @@ import org.apache.camel.component.jackson.JacksonDataFormat;
 import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
-import org.apache.commons.beanutils.BeanUtils;
-import org.apache.commons.beanutils.BeanUtilsBean;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
@@ -58,8 +55,7 @@ import com.rdnsn.b2intgr.processor.UploadProcessor;
  */
 public class ZRouteBuilder extends RouteBuilder {
 
-	public static final String HTTP4_PARAMS = "";
-	//	 + "?throwExceptionOnFailure=false&okStatusCodeRange=100-99&disableStreamCache=true";
+	public static final String HTTP4_PARAMS = "?throwExceptionOnFailure=false&okStatusCodeRange=100-99&disableStreamCache=true";
 
 	private Logger log = LoggerFactory.getLogger(getClass());
 
@@ -67,6 +63,7 @@ public class ZRouteBuilder extends RouteBuilder {
 	private final ObjectMapper objectMapper;
 	private final AuthAgent authAgent;
     private String ppath_delete_files = "/b2api/v1/b2_delete_file_version" + "?throwExceptionOnFailure=false&okStatusCodeRange=100-999";
+    private String ppath_list_file_vers = "/b2api/v1/b2_list_file_versions" + "?throwExceptionOnFailure=false&okStatusCodeRange=100-999";
 
     public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent)
 			throws JsonParseException, JsonMappingException, FileNotFoundException, IOException {
@@ -89,30 +86,12 @@ public class ZRouteBuilder extends RouteBuilder {
 	 */
 	public void configure() {
 
-//		 onException(HttpOperationFailedException.class)
-//		 .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
-//		 .redeliveryDelay(serviceConfig.getRedeliveryDelay())
-//		 .end();
-		// errorHandler(defaultErrorHandler().maximumRedeliveries(3));
-		
-//		onException(HttpOperationFailedException.class).onWhen(exchange -> {
-//			exchange.getOut().setHeader("cause", exchange.getException().getMessage());
-//			HttpOperationFailedException exe = exchange.getException(HttpOperationFailedException.class);
-//			return exe.getStatusCode() > 204;
-//		}).redeliveryDelay(2000).handled(true)
-//		.log("HTTP exception handled").onException(java.lang.NullPointerException.class);
-		
-
 		 onException(UploadException.class) 
 		 .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
 		 .redeliveryDelay(serviceConfig.getRedeliveryDelay());
 
 		defineRestServer();
 
-//		from("direct:mailadmin")
-//			.log("${headers}")
-//		.end();
-		
 		// Authenticate
 		from("direct:auth")
 			.enrich("bean:authAgent?method=getAuthResponse", authAgent)
@@ -126,6 +105,11 @@ public class ZRouteBuilder extends RouteBuilder {
 		// Replies -> List Files in base bucket
 		from("direct:rest.list_files")
 			.to("direct:auth", "direct:list_files")
+		.end();
+
+		// Replies -> List File Versions
+		from("direct:rest.list_filevers")
+			.to("direct:auth", "direct:list_filevers")
 		.end();
 
 		// Replies -> Delete Files
@@ -184,11 +168,42 @@ public class ZRouteBuilder extends RouteBuilder {
             .enrich(
             getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_list_file_names" + ZRouteBuilder.HTTP4_PARAMS,
             (Exchange original, Exchange resource) -> {
+
                 log.debug("resource.getIn().getHeaders(): {} ", resource.getIn().getHeaders());
-                original.getOut().setBody(coerceClass(resource.getIn(), B2FileListResponse.class));
+                original.getOut().setBody(
+                    coerceClass(resource.getIn(), ListFilesResponse.class)
+                        .setMakeDownloadUrl(file -> String.format("%s/file/%s/%s",
+                            authAgent.getAuthResponse().getDownloadUrl(),
+                            serviceConfig.getRemoteStorageConf().getBucketName(),
+                            file.getFileName()))
+                );
                 return original;
             })
-            //.marshal().json(JsonLibrary.Jackson)
+        .end();
+
+        from("direct:list_filevers")
+            .process( exchange -> {
+                final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
+                ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
+                lfr.setBucketId(serviceConfig.getRemoteBucketId());
+                exchange.getIn().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
+                exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+                exchange.getIn().setBody(lfr);
+            })
+            .marshal().json(JsonLibrary.Jackson)
+            .enrich(
+            getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_vers,
+            (Exchange original, Exchange resource) -> {
+                log.debug("resource.getIn().getHeaders(): {} ", resource.getIn().getHeaders());
+                original.getOut().setBody(
+                        coerceClass(resource.getIn(), ListFilesResponse.class)
+                                .setMakeDownloadUrl(file -> String.format("%s/file/%s/%s",
+                                        authAgent.getAuthResponse().getDownloadUrl(),
+                                        serviceConfig.getRemoteStorageConf().getBucketName(),
+                                        file.getFileName()))
+                );
+                return original;
+            })
         .end();
 
         from("direct:rm_files")
@@ -209,48 +224,64 @@ public class ZRouteBuilder extends RouteBuilder {
 
         from("vm:delete")
             .marshal().json(JsonLibrary.Jackson)
-            .threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
+
+//            .threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
             .enrich(
                 getHttp4Proto(authAgent.getApiUrl()) + ppath_delete_files,
                 (Exchange original, Exchange resource) -> {
-                    DeleteFile delFile = coerceClass(resource.getIn(), DeleteFile.class);
-                    DeleteFilesResponse delResp = null;
 
-                    if ((delResp = original.getIn().getBody(DeleteFilesResponse.class)) == null) {
-                        DeleteFilesRequest delRequest = (DeleteFilesRequest) original.getIn().removeHeader("DeleteFilesRequest");
+                    DeleteFileResponse delFileResponse = coerceClass(original.getIn(), DeleteFileResponse.class);
 
-                        delResp = new DeleteFilesResponse(delRequest.getFiles());
-                        original.getIn().setBody(delResp);
+//                    log.error(" original.getOut().setBody(: " +  original.getOut().getBody());
+                    log.error(" original.getIn().setBody(: " +  delFileResponse);
+
+                    DeleteFilesResponse respList = original.getOut().getBody(DeleteFilesResponse.class);
+
+                    if ( respList == null ) {
+//                        DeleteFilesRequest delRequest = (DeleteFilesRequest) original.getIn().removeHeader("DeleteFilesRequest");
+//                        delResp = new DeleteFilesResponse(delRequest.getFiles());
+                                respList = new DeleteFilesResponse();
+                        log.error("Created New DeleteResponse");
+                        original.getOut().setBody(respList);
+
                     }
-                    System.err.println("original.getIn().getHeaders() " + original.getIn().getHeaders());
+
 
                     final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-
+//                    FileResponse delFile = null;
                     if (HttpStatus.SC_OK != code) {
+                        ErrorObject error = coerceClass(resource.getIn(), ErrorObject.class);
+                        delFileResponse.setError(error);
+                        log.debug("error: " + error);
 
-                        delResp.getFile(extractId(delFile))
-                            .setCode(delFile.getCode())
-                            .setMessage(delFile.getMessage())
-                            .setStatus(delFile.getStatus());
+//                        fes.setCode(delFile.getCode())
+//                            .setMessage(delFile.getMessage())
+//                            .setStatus(delFile.getStatus());
                     }
+                    log.debug("delFileResponse: " + delFileResponse);
+                    respList.updateFile(delFileResponse);
+                    original.getIn().setBody(respList);
+
+                    log.debug("respList: " + respList);
                     return original;
                 }
             )
         .end();
 	}
 
-    private String extractId(DeleteFile delFile) {
-	    String id = delFile.getFileId();
-	    if (id == null) {
-            Pattern pattern = Pattern.compile("([^\\s]+)$");
+    private String extractId(ReadsError delFile) {
+	    String id = null;
+        Pattern pattern = Pattern.compile("([^\\s]+)$");
+        Matcher matcher = pattern.matcher(delFile.getMessage());
 
-            Matcher matcher = pattern.matcher(delFile.getMessage());
-            System.err.println("delFile.getMessage(): " + delFile.getMessage());
+        log.debug("delFile.getMessage(): " + delFile.getMessage());
 
-            if (matcher.find()) {
-                id = matcher.group(1);
-            }
+        if (matcher.find()) {
+            id = matcher.group(1);
         }
+
+        log.debug("delFile id: " + id);
+
         return id;
     }
 
@@ -258,7 +289,9 @@ public class ZRouteBuilder extends RouteBuilder {
     private <T> T coerceClass(Message rsrcIn, Class<T> type) {
         T obj = null;
         try {
-            obj = objectMapper.readValue(rsrcIn.getBody(String.class), type);
+            String string =  rsrcIn.getBody(String.class);
+            log.debug("Got string: {}", string);
+            obj = objectMapper.readValue(string, type);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -321,11 +354,12 @@ public class ZRouteBuilder extends RouteBuilder {
 				.componentProperty("urlDecodeHeaders", "true").skipBindingOnErrorCode(false)
 				.dataFormatProperty("prettyPrint", "true").componentProperty("chunked", "true");
 
-		return rest(serviceConfig.getContextUri()).produces("application/json")
-
+		return rest(serviceConfig.getContextUri())
+                .produces("application/json")
 
             // Upload a File
             .post("/{destDir}/upload")
+                .description("Upload (and revise) files. Uploading to the same name and path rsults in creating a new <i>version</i> of the file.")
                 .bindingMode(RestBindingMode.off)
                 .consumes("multipart/form-data")
                 .produces("application/json")
@@ -333,24 +367,27 @@ public class ZRouteBuilder extends RouteBuilder {
 
             // List Buckets
             .get("/list")
+                .description("List buckets")
                 .bindingMode(RestBindingMode.off)
                 .produces("application/json")
                 .to("direct:rest.list_buckets")
 
 
             // List Files
-            .post("/ls").type(ListFilesRequest.class)
+            .post("/ls").type(ListFilesRequest.class).outType(ListFilesResponse.class)
+                .description("List files")
 				.bindingMode(RestBindingMode.auto)
 				.produces("application/json")
 				.to("direct:rest.list_files")
 
-//            // List File Versions
-//            .post("/lsvers").type(ListFilesRequest.class)
-//				.bindingMode(RestBindingMode.auto)
-//				.produces("application/json")
-//				.to("direct:rest.list_filevers")
+            // List File Versions
+            .post("/lsvers").type(ListFilesRequest.class).outType(ListFilesResponse.class)
+                .description("List file and versions thereof")
+				.bindingMode(RestBindingMode.auto)
+				.produces("application/json")
+				.to("direct:rest.list_filevers")
 
-            .delete("/rm").type(DeleteFilesRequest.class).outType(String.class)
+            .delete("/rm").type(DeleteFilesRequest.class).outType(DeleteFilesResponse.class)
 				.bindingMode(RestBindingMode.auto)
 //                .produces("text/plain")
 				.produces("application/json")
@@ -399,10 +436,12 @@ public class ZRouteBuilder extends RouteBuilder {
 							Files.createDirectories(destination.getParent());
 							log.info("\"Received file\":{ \"name\": \"{}\", \"Size\": \"{}\"}", item.getName(), item.getSize());
 							Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-							UserFile uf = new UserFile(destination,
-									StringUtils.isBlank(item.getFieldName()) ? contextId
-											: contextId + File.separatorChar + pathFromUser + File.separatorChar
-													+ URLEncoder.encode(destination.getFileName().toString(), Constants.UTF_8));
+
+							UserFile uf = new UserFile(destination, StringUtils.isBlank(item.getFieldName())
+                                ? contextId
+                                : contextId + File.separatorChar + pathFromUser + File.separatorChar
+                                            + URLEncoder.encode(destination.getFileName().toString(), Constants.UTF_8));
+
 							uf.setContentType(item.getContentType());
 							item.delete();
 							uploadData.addFile(uf);

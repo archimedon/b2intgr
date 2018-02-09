@@ -19,9 +19,10 @@ import org.slf4j.LoggerFactory;
 
 public class AuthAgent implements AggregationStrategy {
 
-    private Logger log = LoggerFactory.getLogger(AuthAgent.class);
+    private static Logger log = LoggerFactory.getLogger(AuthAgent.class);
 
-    private static AuthResponse authResponse;
+    private static AuthResponse authResponse = null;
+
 	private final ObjectMapper objectMapper;
 	private final HttpGet request;
 
@@ -35,42 +36,44 @@ public class AuthAgent implements AggregationStrategy {
 		aReq.setHeader(Constants.AUTHORIZATION, "Basic " + basicAuthHeader);
 		return aReq;
 	}
+    boolean open = true;
 
-	public AuthResponse getAuthResponse() {
+    synchronized public AuthResponse getAuthResponse() {
 
 		if (isExpired()) {
-			setAuthResponse(getAuthorization());
-		}
+            getAuthorization();
+            open = false;
+            log.info("Auth Token Updated: {}", authResponse);
+        }
 		return authResponse;
 	}
 
-    private AuthResponse getAuthorization() {
-        AuthResponse tmp = null;
-
+    synchronized private AuthResponse getAuthorization() {
         try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
 
             HttpResponse response = httpclient.execute(request);
             response.getEntity().writeTo(buf);
-            String json = buf.toString(Constants.UTF_8);
-            tmp = objectMapper.readValue(json, AuthResponse.class);
-            log.info("Received Auth:\n{}", json);
+//            String json = buf.toString(Constants.UTF_8);
+            authResponse = objectMapper.readValue(buf.toString(Constants.UTF_8), AuthResponse.class);
+//            log.info("Auth String:\n{}", json);
+            log.info("AuthObject:\n{}", authResponse);
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-		return tmp;
+		return this.authResponse;
 	}
 
-	private void setAuthResponse(AuthResponse auth){
-        this.authResponse = auth;
-        log.info("Auth Token Updated: {}", authResponse);
-    }
+//    private void setAuthResponse(AuthResponse auth){
+//        this.authResponse = auth;
+//    }
 
 	@Override
 	public Exchange aggregate(Exchange original, Exchange resource) {
 		if (original == null) {
+		    log.debug("IS NULL orig");
             // the first time we only have the new exchange
             return resource;
         }
@@ -90,7 +93,7 @@ public class AuthAgent implements AggregationStrategy {
 	}
 
     public boolean isExpired() {
-        return authResponse == null || (utcInSecs() - this.authResponse.getLastmod()) >= Constants.B2_TOKEN_TTL;
+        return authResponse == null || (utcInSecs() - authResponse.getLastmod()) >= Constants.B2_TOKEN_TTL;
     }
 
     private long utcInSecs() {
@@ -98,7 +101,7 @@ public class AuthAgent implements AggregationStrategy {
     }
 
     public String getApiUrl() {
-        return this.getAuthResponse().getApiUrl();
+        return getAuthResponse().getApiUrl();
     }
 }
 

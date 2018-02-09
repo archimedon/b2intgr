@@ -13,13 +13,13 @@ import java.util.List;
 public class DeleteFilesRequest {
 
     @JsonProperty
-    protected List<DeleteFile> files;
+    protected List<B2SimpleFile> files;
 
-    public List<DeleteFile> getFiles() {
+    public List<B2SimpleFile> getFiles() {
         return files;
     }
 
-    public DeleteFilesRequest setFiles(List<DeleteFile> files) {
+    public DeleteFilesRequest setFiles(List<B2SimpleFile> files) {
         this.files = files;
         return this;
     }

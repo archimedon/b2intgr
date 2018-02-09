@@ -57,11 +57,14 @@ public class UploadProcessor extends BaseProcessor {
 
 	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authdUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
 
-		return objectMapper.readValue(producer.send(getHttp4Proto(authdUploadUrl) + ZRouteBuilder.HTTP4_PARAMS, innerExchg -> {
+		String json = producer.send(getHttp4Proto(authdUploadUrl) + ZRouteBuilder.HTTP4_PARAMS, innerExchg -> {
 			innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
 			innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
 			innerExchg.getIn().setBody(this.bucketMap);
-		}).getOut().getBody(String.class), GetUploadUrlResponse.class);				
+		}).getOut().getBody(String.class);
+		log.debug("pream json: {} ", json);
+		return objectMapper.readValue(json, GetUploadUrlResponse.class);
+
 	}
 	
 	@Override

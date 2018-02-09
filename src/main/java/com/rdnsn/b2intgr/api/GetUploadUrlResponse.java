@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class GetUploadUrlResponse extends B2ResponseBase {
+public class GetUploadUrlResponse {
 
 	@JsonProperty
 	private String authorizationToken;

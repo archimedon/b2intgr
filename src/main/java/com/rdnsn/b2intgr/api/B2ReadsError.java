@@ -8,8 +8,9 @@ import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
 public class B2ReadsError implements ReadsError {
 
+    @JsonInclude(value = JsonInclude.Include.NON_NULL)
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-    protected ReadsError error = new ErrorObject();
+    protected ReadsError error = null;
 
     public B2ReadsError() {
         super();
@@ -38,17 +39,20 @@ public class B2ReadsError implements ReadsError {
         return this;
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+//    JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnore
     public String getCode() {
         return (String) (error == null ? null : error.getCode());
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+//    JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnore
     public Integer getStatus() {
         return (Integer) (error == null ? null : error.getStatus());
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+//    JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnore
     public String getMessage() {
         return (String) (error == null ? null : error.getMessage());
     }

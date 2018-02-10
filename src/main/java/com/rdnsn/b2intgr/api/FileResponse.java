@@ -10,16 +10,15 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FileResponse extends B2SimpleErrorFile implements ReadsError, B2BaseFile {
 
+    public FileResponse() {
+        super();
+    }
 
     public FileResponse(B2BaseFile fdat) {
         this();
         this.setFileId(fdat.getFileId())
             .setFileName(fdat.getFileName())
             .setDownloadUrl(fdat.getDownloadUrl());
-    }
-
-    public FileResponse() {
-        super();
     }
 
 //    @JsonInclude(JsonInclude.Include.NON_NULL)

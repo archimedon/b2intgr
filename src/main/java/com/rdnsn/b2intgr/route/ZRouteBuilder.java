@@ -56,7 +56,8 @@ import com.rdnsn.b2intgr.processor.UploadProcessor;
  */
 public class ZRouteBuilder extends RouteBuilder {
 
-	public static final String HTTP4_PARAMS = "?throwExceptionOnFailure=false&okStatusCodeRange=100-99&disableStreamCache=true";
+	public static final String HTTP4_PARAMS = "?throwExceptionOnFailure=false&okStatusCodeRange=100-999";
+//            "&disableStreamCache=true";
 
 	private Logger log = LoggerFactory.getLogger(getClass());
 

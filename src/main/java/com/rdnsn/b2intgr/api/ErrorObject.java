@@ -16,7 +16,7 @@ import java.util.Map;
 public class ErrorObject implements ReadsError {
 
     @JsonProperty
-    private Integer status = 200;
+    private Integer status;
     @JsonProperty
     private String message;
     @JsonProperty

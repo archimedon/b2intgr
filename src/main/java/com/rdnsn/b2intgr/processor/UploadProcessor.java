@@ -10,10 +10,12 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
+import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.http4.HttpMethods;
 import org.apache.commons.beanutils.BeanUtils;
@@ -43,7 +45,7 @@ public class UploadProcessor extends BaseProcessor {
 	
 	private final ObjectMapper objectMapper;
 	private final CloudFSConfiguration serviceConfig;
-	private String bucketMap;
+	private final String bucketMap;
     
 	public UploadProcessor(CloudFSConfiguration serviceConfig, ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
@@ -55,14 +57,18 @@ public class UploadProcessor extends BaseProcessor {
 		}
 	}
 
-	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authdUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
+	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
+		String uri = getHttp4Proto(authUploadUrl) + ZRouteBuilder.HTTP4_PARAMS;
 
-		String json = producer.send(getHttp4Proto(authdUploadUrl) + ZRouteBuilder.HTTP4_PARAMS, innerExchg -> {
+
+		String json = producer.send(uri, (Exchange innerExchg) -> {
 			innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
 			innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
-			innerExchg.getIn().setBody(this.bucketMap);
+			innerExchg.getIn().setBody(bucketMap);
 		}).getOut().getBody(String.class);
-		log.debug("pream json: {} ", json);
+
+		log.debug("preamble json: {} ", json);
+
 		return objectMapper.readValue(json, GetUploadUrlResponse.class);
 
 	}
@@ -73,6 +79,7 @@ public class UploadProcessor extends BaseProcessor {
 		final UserFile userFile = exchange.getIn().getBody(UserFile.class);
 		final AuthResponse remoteAuth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
 
+//		log.debug("remoteAuth: {} ", remoteAuth);
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
 		final GetUploadUrlResponse uploadAuth =
 				doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());

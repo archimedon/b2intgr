@@ -112,7 +112,6 @@ public class UploadProcessor extends BaseProcessor {
 
 		producer.stop();
 		final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-		final String response = responseOut.getBody(String.class);
 
 		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getName());
 
@@ -123,7 +122,7 @@ public class UploadProcessor extends BaseProcessor {
 			log.info("Completed: '{}'", downloadUrl);
 
 			try {
-				UploadFileResponse uploadResponse = objectMapper.readValue(response, UploadFileResponse.class);
+				UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
 				exchange.getOut().copyFromWithNewBody(responseOut, ImmutableList.of(BeanUtils.describe(uploadResponse)));
 				exchange.getOut().setHeader(Constants.DOWNLOAD_URL, downloadUrl);
 			} catch (Exception e) {

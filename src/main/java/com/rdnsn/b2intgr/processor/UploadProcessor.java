@@ -1,6 +1,6 @@
 package com.rdnsn.b2intgr.processor;
 
-import static com.rdnsn.b2intgr.RemoteStorageConfiguration.getHttp4Proto;
+import static com.rdnsn.b2intgr.route.ZRouteBuilder.getHttp4Proto;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -58,19 +58,16 @@ public class UploadProcessor extends BaseProcessor {
 	}
 
 	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
+
 		String uri = getHttp4Proto(authUploadUrl) + ZRouteBuilder.HTTP4_PARAMS;
 
-
-		String json = producer.send(uri, (Exchange innerExchg) -> {
-			innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-			innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
-			innerExchg.getIn().setBody(bucketMap);
-		}).getOut().getBody(String.class);
-
-		log.debug("preamble json: {} ", json);
-
-		return objectMapper.readValue(json, GetUploadUrlResponse.class);
-
+		return objectMapper.readValue(
+			producer.send(uri, (Exchange innerExchg) -> {
+				innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+				innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
+				innerExchg.getIn().setBody(bucketMap);
+			}).getOut().getBody(String.class),
+			GetUploadUrlResponse.class);
 	}
 	
 	@Override
@@ -79,7 +76,6 @@ public class UploadProcessor extends BaseProcessor {
 		final UserFile userFile = exchange.getIn().getBody(UserFile.class);
 		final AuthResponse remoteAuth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
 
-//		log.debug("remoteAuth: {} ", remoteAuth);
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
 		final GetUploadUrlResponse uploadAuth =
 				doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());

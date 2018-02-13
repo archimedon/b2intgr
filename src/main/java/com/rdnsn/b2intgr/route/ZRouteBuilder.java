@@ -1,6 +1,5 @@
 package com.rdnsn.b2intgr.route;
 
-import static com.rdnsn.b2intgr.RemoteStorageConfiguration.getHttp4Proto;
 
 import java.io.*;
 import java.net.URLDecoder;
@@ -9,22 +8,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Formatter;
 import java.util.List;
-import java.util.Optional;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
-import com.rdnsn.b2intgr.api.*;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Message;
 import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.http4.HttpMethods;
-import org.apache.camel.component.jackson.JacksonDataFormat;
 
 import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.camel.model.rest.RestBindingMode;
@@ -41,10 +40,9 @@ import org.restlet.representation.InputRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.api.*;
 import com.rdnsn.b2intgr.CloudFSConfiguration;
 import com.rdnsn.b2intgr.Constants;
 import com.rdnsn.b2intgr.model.UploadData;
@@ -272,6 +270,24 @@ public class ZRouteBuilder extends RouteBuilder {
             e.printStackTrace();
         }
         return obj;
+    }
+
+    public static final Pattern httpPattern = Pattern.compile("(https{0,1})(.+)");
+
+    public static String getHttp4Proto(String url) {
+        String str = url;
+        Matcher m = httpPattern.matcher(url);
+        if (m.find()) {
+            str = m.replaceFirst("$1" + "4$2");
+        }
+        return str;
+    }
+
+    public static String http4Suffix(String url) {
+        return url + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true"
+                + "&disableStreamCache=false";
+//		+ "&transferException=false&"
+//		+ "useSystemProperties=true";
     }
 
     // TODO: 2/10/18 save URL mapping to DB or file

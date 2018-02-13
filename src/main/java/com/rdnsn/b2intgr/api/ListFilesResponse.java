@@ -44,11 +44,6 @@ public class ListFilesResponse extends AbstractListResponse {
     }
 
     public ListFilesResponse setFiles(List<B2FileItem> files) {
-//        if (files !=null &&  ! (files.get(0) instanceof B2FileItem) ) {
-//            this.files = files.stream().map(g -> new B2FileItem(g)).collect(Collectors.toList());
-//        }
-//        else {
-//        }
         this.files = files;
 
         return this;

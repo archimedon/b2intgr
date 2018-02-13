@@ -23,23 +23,29 @@ public class DeleteFilesResponse extends AbstractListResponse<FileResponse> {
 
     public DeleteFilesResponse(List<FileResponse> files) {
         super(files);
+        super.beenRun = true;
     }
 
     @JsonIgnore
     public DeleteFileResponse getFile(String fileId) {
-        int idx = -1;
-        if (files == null || (idx = files.indexOf(new FileResponse().setFileId(fileId))) < 0)
-            return null;
+        int idx = (files == null)
+            ? -1 : files.indexOf(new FileResponse().setFileId(fileId));
 
-        return (DeleteFileResponse) files.get(idx);
+        return (idx > 0)
+            ? (DeleteFileResponse) files.get(idx) : null;
     }
 
     public DeleteFilesResponse updateFile(FileResponse file) {
+        if (files == null)
+            files = new ArrayList();
+
         int idx = files.indexOf(file);
-        if (idx >= 0)
+
+        if (idx > 0)
             files.set(idx, file);
         else
             files.add(file);
+
         return this;
     }
 

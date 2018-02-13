@@ -10,7 +10,7 @@ import java.util.function.Function;
 
 public abstract class AbstractListResponse<E extends B2BaseFile> extends B2ReadsError implements ReadsError {
 
-    protected Function<E, String> makeDownloadUrl = x -> x.getDownloadUrl();
+    protected Function<E, String> makeDownloadUrl = null; //x -> x.getDownloadUrl() == null ? "/" + x.getFileName() : x.getDownloadUrl();
 
     protected boolean beenRun = false;
 
@@ -28,7 +28,6 @@ public abstract class AbstractListResponse<E extends B2BaseFile> extends B2Reads
         this.files = files;
     }
 
-    //JsonGetter(value = "files")
     /**
      * Get the file list
      *
@@ -47,8 +46,10 @@ public abstract class AbstractListResponse<E extends B2BaseFile> extends B2Reads
     }
 
     private void applyUrlFormat() {
-        if (files != null) {
-            files.forEach(fileDat -> fileDat.setDownloadUrl(makeDownloadUrl.apply(fileDat)));
+        if (makeDownloadUrl!= null && files != null) {
+            files.forEach(fileDat -> {
+                fileDat.setDownloadUrl( makeDownloadUrl.apply(fileDat));
+            });
             beenRun = true;
         }
     }
@@ -62,8 +63,7 @@ public abstract class AbstractListResponse<E extends B2BaseFile> extends B2Reads
      */
     public <T extends AbstractListResponse<E>> T setMakeDownloadUrl(Function<E, String> makeDownloadUrl) {
         this.makeDownloadUrl = makeDownloadUrl;
-        if (files != null)
-            applyUrlFormat();
+//            applyUrlFormat();
         return (T) this;
     }
 

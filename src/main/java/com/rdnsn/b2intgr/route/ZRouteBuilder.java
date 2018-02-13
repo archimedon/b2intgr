@@ -88,15 +88,22 @@ public class ZRouteBuilder extends RouteBuilder {
 
         final AggregationStrategy fileListResultAggregator =  (Exchange oldExchange, Exchange newExchange) -> {
             Message newIn = newExchange.getIn();
+
             FileResponse newBody = newIn.getBody(FileResponse.class);
-            DeleteFilesResponse respList = null;
+
             if (oldExchange == null) {
-                log.error("Created New DeleteResponse {}", respList);
-                respList = new DeleteFilesResponse();
-                respList.updateFile(newBody);
-                newIn.setBody(respList);
+
+                newIn.setBody(
+                    new DeleteFilesResponse().updateFile(newBody)
+                        .setMakeDownloadUrl(file -> String.format("%s/file/%s/%s",
+                            authAgent.getAuthResponse().getDownloadUrl(),
+                            serviceConfig.getRemoteStorageConf().getBucketName(),
+                            file.getFileName()))
+                );
+
                 return newExchange;
-            } else {
+            }
+            else {
                 oldExchange.getIn()
                     .getBody(DeleteFilesResponse.class)
                     .updateFile(newBody);
@@ -105,13 +112,10 @@ public class ZRouteBuilder extends RouteBuilder {
         };
 
         final AggregationStrategy fileResponseAggregator = (Exchange original, Exchange resource) -> {
-            original.getOut().setBody(
-                coerceClass(resource.getIn(), ListFilesResponse.class).setMakeDownloadUrl(file -> String.format("%s/file/%s/%s",
-                        authAgent.getAuthResponse().getDownloadUrl(),
-                        serviceConfig.getRemoteStorageConf().getBucketName(),
-                        file.getFileName())
-                )
-            );
+            original.getOut().setBody(coerceClass(resource.getIn(), ListFilesResponse.class).setMakeDownloadUrl(file -> String.format("%s/file/%s/%s",
+                    authAgent.getAuthResponse().getDownloadUrl(),
+                    serviceConfig.getRemoteStorageConf().getBucketName(),
+                    file.getFileName())));
             return original;
         };
 
@@ -131,11 +135,10 @@ public class ZRouteBuilder extends RouteBuilder {
             exchange.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
             exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
             exchange.getOut().setBody(objectMapper.writeValueAsString(ImmutableMap.of(
-                    "accountId", auth.getAccountId(),
-                    "bucketTypes", ImmutableList.of("allPrivate", "allPublic")
+                "accountId", auth.getAccountId(),
+                "bucketTypes", ImmutableList.of("allPrivate", "allPublic")
             )));
         };
-
 
         onException(UploadException.class)
 		 .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
@@ -179,7 +182,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
 		from("direct:b2upload").routeId("upload_facade")
 			.to("direct:auth")
-			.split( new ListSplitExpression())
+			.split(new ListSplitExpression())
 			.to("vm:sub")
 		.end();
 
@@ -215,7 +218,10 @@ public class ZRouteBuilder extends RouteBuilder {
         from("direct:list_filevers")
             .process(createPostFileList)
             .marshal().json(JsonLibrary.Jackson)
-            .enrich(getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_vers, fileResponseAggregator)
+            .enrich(getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_vers, (Exchange original, Exchange resource) -> {
+                original.getOut().setBody(coerceClass(resource.getIn(), ListFilesResponse.class));
+                return original;
+            })
         .end();
 
         from("direct:rm_files")
@@ -259,7 +265,6 @@ public class ZRouteBuilder extends RouteBuilder {
             ).outputType(FileResponse.class)
         .end();
 	}
-
 
     private <T> T coerceClass(Message rsrcIn, Class<T> type) {
         T obj = null;

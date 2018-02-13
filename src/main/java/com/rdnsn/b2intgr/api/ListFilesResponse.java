@@ -32,12 +32,6 @@ public class ListFilesResponse extends AbstractListResponse<B2FileItem> {
         return nextFileName;
     }
 
-//
-//    public List<B2FileItem> getFiles()
-//    {
-//        return (List<B2FileItem>) super.getFiles();
-//    }
-//
     public ListFilesResponse setNextFileName(String nextFileName) {
         this.nextFileName = nextFileName;
         return this;

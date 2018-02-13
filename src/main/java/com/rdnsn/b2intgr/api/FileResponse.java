@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
+import java.io.Serializable;
+
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -20,7 +22,6 @@ public class FileResponse extends B2SimpleErrorFile implements ReadsError, B2Bas
             .setFileName(fdat.getFileName())
             .setDownloadUrl(fdat.getDownloadUrl());
     }
-
 //    @JsonInclude(JsonInclude.Include.NON_NULL)
 //    public ErrorObject getError() {
 //        return error;

@@ -14,57 +14,34 @@ import java.util.stream.Collectors;
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class DeleteFilesResponse extends AbstractListResponse {
-
-    @JsonIgnore
-    final private Map<String, FileResponse> fileAT;
+public class DeleteFilesResponse extends AbstractListResponse<FileResponse> {
 
 
     public DeleteFilesResponse() {
         super();
-        this.fileAT = new HashMap<String, FileResponse>();
     }
 
-    public DeleteFilesResponse(List<? extends B2BaseFile> files) {
-        this();
-        this.setFiles(files);
-    }
-
-    @JsonGetter(value = "files")
-    public List<B2SimpleFile> getFiles() {
-        return new ArrayList(fileAT.values());
-    }
-
-    @JsonSetter(value = "files")
-    public DeleteFilesResponse setFiles(List<? extends B2BaseFile> files) {
-        files.forEach(fdat -> {
-            fileAT.put(fdat.getFileId(), new FileResponse(fdat));
-        });
-
-        return this;
-    }
-
-    public Map<String, FileResponse> getFileAT() {
-        return fileAT;
+    public DeleteFilesResponse(List<FileResponse> files) {
+        super(files);
     }
 
     @JsonIgnore
-    public FileResponse getFile(String fileId) {
-        return fileAT.get(fileId);
+    public DeleteFileResponse getFile(String fileId) {
+        int idx = -1;
+        if (files == null || (idx = files.indexOf(new FileResponse().setFileId(fileId))) < 0)
+            return null;
+
+        return (DeleteFileResponse) files.get(idx);
     }
 
     public DeleteFilesResponse updateFile(FileResponse file) {
-
-        fileAT.put(file.getFileId(), file);
+        int idx = files.indexOf(file);
+        if (idx >= 0)
+            files.set(idx, file);
+        else
+            files.add(file);
         return this;
     }
-
-//    public DeleteFilesResponse setFiles(Collection<FileResponse> files) {
-//
-//        files.forEach(deleteFile -> fileAT.put(deleteFile.getFileId(), deleteFile));
-//        return this;
-//    }
-    // DeleteFileResponse
 
     @Override
     public String toString() {

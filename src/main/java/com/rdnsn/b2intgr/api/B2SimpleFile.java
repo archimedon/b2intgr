@@ -59,6 +59,21 @@ public class B2SimpleFile implements B2BaseFile {
     }
 
     @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        B2SimpleFile that = (B2SimpleFile) o;
+
+        return fileId.equals(that.fileId);
+    }
+
+    @Override
+    public int hashCode() {
+        return fileId.hashCode();
+    }
+
+    @Override
     public String toString() {
         return ReflectionToStringBuilder.toString(this);
     }

@@ -68,7 +68,8 @@ public class ZRouteBuilder extends RouteBuilder {
     private final String ppath_list_file_vers = "/b2api/v1/b2_list_file_versions" + HTTP4_PARAMS;
     private final String ppath_list_buckets = "/b2api/v1/b2_list_buckets" + HTTP4_PARAMS;
     private String ppath_list_file_names = "/b2api/v1/b2_list_file_names";
-
+    
+    // // TODO: 2/13/18 url-encode the downloadURL
     public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) {
 		super();
 		this.objectMapper = objectMapper;
@@ -218,10 +219,7 @@ public class ZRouteBuilder extends RouteBuilder {
         from("direct:list_filevers")
             .process(createPostFileList)
             .marshal().json(JsonLibrary.Jackson)
-            .enrich(getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_vers, (Exchange original, Exchange resource) -> {
-                original.getOut().setBody(coerceClass(resource.getIn(), ListFilesResponse.class));
-                return original;
-            })
+            .enrich(getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_vers, fileResponseAggregator)
         .end();
 
         from("direct:rm_files")

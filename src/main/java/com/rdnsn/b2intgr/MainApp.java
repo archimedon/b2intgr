@@ -1,8 +1,7 @@
 package com.rdnsn.b2intgr;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
+import java.net.InetAddress;
 import java.util.Date;
 
 import org.apache.activemq.camel.component.ActiveMQComponent;
@@ -50,14 +49,25 @@ public class MainApp {
     }
 
 
-    public MainApp(String configFile) throws IOException {
+    public MainApp(String[] args) throws IOException {
         this.objectMapper = new ObjectMapper();
-        this.serviceConfig = objectMapper.readValue(new FileInputStream(configFile), CloudFSConfiguration.class);
+        this.serviceConfig =  objectMapper.readValue(
+                getClass().getResourceAsStream("/config.json"), CloudFSConfiguration.class);
+//        this.serviceConfig = objectMapper.readValue(new FileInputStream(configFile), CloudFSConfiguration.class);
     }
 
     public static void main(String[] args) throws Exception {
-        MainApp app = new MainApp("config.json");
+        MainApp app = new MainApp(args);
         app.boot();
+        app.writeConnectionString();
+    }
+
+    private void writeConnectionString() throws Exception {
+        String buf = String.format("http://%s:%d%s", InetAddress.getLocalHost().getHostAddress(), serviceConfig.getPort(), serviceConfig.getContextUri());
+        FileOutputStream fo = new FileOutputStream(new File(serviceConfig.getDocRoot(), "queue_url.txt"));
+        System.err.println("Url: " + buf);
+        fo.write(buf.getBytes());
+        fo.close();
     }
 
     public void boot() throws Exception {

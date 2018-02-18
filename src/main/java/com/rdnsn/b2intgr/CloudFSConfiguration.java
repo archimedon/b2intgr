@@ -12,181 +12,183 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonSerialize()
 public class CloudFSConfiguration {
-	
-	/**
-	 * Configure the Remote server
-	 */
-	@NotNull
-  @JsonProperty
-	private RemoteStorageConfiguration remoteStorageConf;
-    
-	@NotNull
-	@JsonProperty
-	private String host = "localhost";
 
-	@NotNull
-	@JsonProperty
-	private int port = 8080;
-	
-	@NotNull
-	@JsonProperty
-	private String contextUri = "cloudfs/api";
-	
-	@NotNull
-	@JsonProperty
-	private String docRoot = "/tmp/appRoot";
-	
-	@NotNull
-	@JsonProperty
-	private String protocol = "http";
+    /**
+     * Configure the Remote server
+     */
+    @NotNull
+    @JsonProperty
+    private RemoteStorageConfiguration remoteStorageConf;
 
-	@NotNull
-	@JsonProperty
-	private String customSeparator = "\\^";
-	
-	@NotNull
-	@JsonProperty
-	private String adminEmail = "ronniedz@gmail.com";
+    @NotNull
+    @JsonProperty
+    private String host = "localhost";
 
-	@NotNull
-	@JsonProperty
-	private int maximumRedeliveries = 4;
-	
-	@NotNull
-	@JsonProperty
-	private int redeliveryDelay = 5000; // milliseconds
-	
-	@NotNull
-	@JsonProperty
-	private int poolSize = 5; // number of clients in pool
-	
-	@NotNull
-	@JsonProperty
-	private int maxPoolSize = 10; // max number of clients in pool
-	
-	
-	public int getPoolSize() {
-		return poolSize;
-	}
+    @NotNull
+    @JsonProperty
+    private int port = 8080;
 
-	public void setPoolSize(int poolSize) {
-		this.poolSize = poolSize;
-	}
+    @NotNull
+    @JsonProperty
+    private String contextUri = "cloudfs/api";
 
-	public int getMaxPoolSize() {
-		return maxPoolSize;
-	}
+    @NotNull
+    @JsonProperty
+    private String docRoot = "/tmp/appRoot";
 
-	public void setMaxPoolSize(int maxPoolSize) {
-		this.maxPoolSize = maxPoolSize;
-	}
+    @NotNull
+    @JsonProperty
+    private String protocol = "http";
 
-	public String getAdminEmail() {
-		return adminEmail;
-	}
+    @NotNull
+    @JsonProperty
+    private String customSeparator = "\\^";
 
-	public void setAdminEmail(String adminEmail) {
-		this.adminEmail = adminEmail;
-	}
+    @NotNull
+    @JsonProperty
+    private String adminEmail = "ronniedz@gmail.com";
 
-	public int getMaximumRedeliveries() {
-		return maximumRedeliveries;
-	}
+    @NotNull
+    @JsonProperty
+    private int maximumRedeliveries = 4;
 
-	public void setMaximumRedeliveries(int maximumRedeliveries) {
-		this.maximumRedeliveries = maximumRedeliveries;
-	}
+    @NotNull
+    @JsonProperty
+    private int redeliveryDelay = 5000; // milliseconds
 
-	public int getRedeliveryDelay() {
-		return redeliveryDelay;
-	}
+    @NotNull
+    @JsonProperty
+    private int poolSize = 5; // number of clients in pool
 
-	public void setRedeliveryDelay(int redeliveryDelay) {
-		this.redeliveryDelay = redeliveryDelay;
-	}
+    @NotNull
+    @JsonProperty
+    private int maxPoolSize = 10; // max number of clients in pool
 
-	public String getProtocol() {
-		return protocol;
-	}
 
-	public void setProtocol(String protocol) {
-		this.protocol = protocol;
-	}
+    public int getPoolSize() {
+        return poolSize;
+    }
 
-	public String getDocRoot() {
-		return docRoot;
-	}
+    public void setPoolSize(int poolSize) {
+        this.poolSize = poolSize;
+    }
 
-	public void setDocRoot(String docRoot) {
-		this.docRoot = docRoot;
-		File f = new File(docRoot);
-		if (! f.exists()) {
-			f.mkdirs();
-		}
-	}
+    public int getMaxPoolSize() {
+        return maxPoolSize;
+    }
 
-	public String getHost() {
-		return host;
-	}
-	
-	public void setHost(String host) {
-		this.host = host;
-	}
-	
-	public int getPort() {
-		return port;
-	}
-	
-	public void setPort(int port) {
-		this.port = port;
-	}
+    public void setMaxPoolSize(int maxPoolSize) {
+        this.maxPoolSize = maxPoolSize;
+    }
 
-	public String getCustomSeparator() {
-		return customSeparator;
-	}
+    public String getAdminEmail() {
+        return adminEmail;
+    }
 
-	public void setCustomSeparator(String customSeparator) {
-		this.customSeparator = customSeparator;
-	}
+    public void setAdminEmail(String adminEmail) {
+        this.adminEmail = adminEmail;
+    }
 
-	public String getContextUri() {
-		return contextUri;
-	}
-	
-	public void setContextUri(String contextUri) {
-		this.contextUri = contextUri;
-	}
-	
-	public String getRemoteBucketId() {
-		return remoteStorageConf.getBucketId();
-	}
-	
-	public String getRemoteBucketName() {
-		return remoteStorageConf.getBucketName();
-	}
-	
-	public String getRemoteAccountId() {
-		return remoteStorageConf.getAccountId();
-	}
-	
-	public String getRemoteApplicationKey() {
-		return remoteStorageConf.getApplicationKey();
-	}
-	
-	public String getRemoteAuthenticationUrl() {
-		return remoteStorageConf.getAuthenticationUrl();
-	}
-	
-	public RemoteStorageConfiguration getRemoteStorageConf() {
-		return remoteStorageConf;
-	}
-	
-	public void setRemoteStorageConf(RemoteStorageConfiguration remoteStorage) {
-		this.remoteStorageConf = remoteStorage;
-	}
+    public int getMaximumRedeliveries() {
+        return maximumRedeliveries;
+    }
 
-	public String getBasicAuthHeader() {
-		return Base64.getEncoder()
-			.encodeToString((getRemoteAccountId() + ":" + getRemoteApplicationKey()).getBytes());
-	}
+    public void setMaximumRedeliveries(int maximumRedeliveries) {
+        this.maximumRedeliveries = maximumRedeliveries;
+    }
+
+    public int getRedeliveryDelay() {
+        return redeliveryDelay;
+    }
+
+    public void setRedeliveryDelay(int redeliveryDelay) {
+        this.redeliveryDelay = redeliveryDelay;
+    }
+
+    public String getProtocol() {
+        return protocol;
+    }
+
+    public void setProtocol(String protocol) {
+        this.protocol = protocol;
+    }
+
+    public String getDocRoot() {
+        return docRoot;
+    }
+
+    public void setDocRoot(String docRoot) {
+        this.docRoot = docRoot;
+        File f = new File(docRoot);
+        if (!f.exists()) {
+            System.err.println((f.mkdirs() ? "Made temp directory " : "Make temp dir failed: ") + f.getPath());
+        } else {
+            System.err.println("Directory exists: " + f.getPath());
+        }
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+
+    public String getCustomSeparator() {
+        return customSeparator;
+    }
+
+    public void setCustomSeparator(String customSeparator) {
+        this.customSeparator = customSeparator;
+    }
+
+    public String getContextUri() {
+        return contextUri;
+    }
+
+    public void setContextUri(String contextUri) {
+        this.contextUri = contextUri;
+    }
+
+    public String getRemoteBucketId() {
+        return remoteStorageConf.getBucketId();
+    }
+
+    public String getRemoteBucketName() {
+        return remoteStorageConf.getBucketName();
+    }
+
+    public String getRemoteAccountId() {
+        return remoteStorageConf.getAccountId();
+    }
+
+    public String getRemoteApplicationKey() {
+        return remoteStorageConf.getApplicationKey();
+    }
+
+    public String getRemoteAuthenticationUrl() {
+        return remoteStorageConf.getAuthenticationUrl();
+    }
+
+    public RemoteStorageConfiguration getRemoteStorageConf() {
+        return remoteStorageConf;
+    }
+
+    public void setRemoteStorageConf(RemoteStorageConfiguration remoteStorage) {
+        this.remoteStorageConf = remoteStorage;
+    }
+
+    public String getBasicAuthHeader() {
+        return Base64.getEncoder()
+                .encodeToString((getRemoteAccountId() + ":" + getRemoteApplicationKey()).getBytes());
+    }
 }

@@ -296,35 +296,11 @@
 			<version>2.0.1</version>
 		</dependency>
 
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-annotations</artifactId>
-    </dependency>
-    <!--<dependency>-->
-      <!--<groupId>com.fasterxml.jackson.core</groupId>-->
-      <!--<artifactId>jackson-core</artifactId>-->
-    <!--</dependency>-->
-    <!--<dependency>-->
-      <!--<groupId>com.fasterxml.jackson.core</groupId>-->
-      <!--<artifactId>jackson-databind</artifactId>-->
-    <!--</dependency>-->
+        <dependency>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-annotations</artifactId>
+        </dependency>
 
-    <!-- json schema -->
-    <!--<dependency>-->
-      <!--<groupId>com.fasterxml.jackson.jaxrs</groupId>-->
-      <!--<artifactId>jackson-jaxrs-json-provider</artifactId>-->
-    <!--</dependency>-->
-    <!--<dependency>-->
-      <!--<groupId>com.fasterxml.jackson.module</groupId>-->
-      <!--<artifactId>jackson-module-jsonSchema</artifactId>-->
-      <!--<exclusions>-->
-        <!--<exclusion>-->
-          <!--<groupId>javax.validation</groupId>-->
-          <!--<artifactId>validation-api</artifactId>-->
-        <!--</exclusion>-->
-      <!--</exclusions>-->
-    <!--</dependency>-->
- 
 	</dependencies>
 
   <build>
@@ -339,18 +315,7 @@
 				  <executable></executable>
               </configuration>
           </plugin>
-		  <!--<plugin>-->
-			  <!--<groupId>org.apache.maven.plugins</groupId>-->
-			  <!--<artifactId>maven-jar-plugin</artifactId>-->
-			  <!--<configuration>-->
-				  <!--<archive>-->
-					  <!--<manifest>-->
-						  <!--<addClasspath>true</addClasspath>-->
-                          <!--<mainClass>com.rdnsn.b2intgr.MainApp</mainClass>-->
-					  <!--</manifest>-->
-				  <!--</archive>-->
-			  <!--</configuration>-->
-		  <!--</plugin>-->
+
           <plugin>
               <groupId>org.apache.maven.plugins</groupId>
               <artifactId>maven-resources-plugin</artifactId>
@@ -372,38 +337,6 @@
               </configuration>
           </plugin>
 
-          <!-- Deployment Plugin -->
-          <!--&lt;!&ndash; Allows run via 'mvn clean heroku:deploy && heroku ps:scale worker=1' &ndash;&gt;-->
-          <!--<plugin>-->
-              <!--<groupId>com.heroku.sdk</groupId>-->
-              <!--<artifactId>heroku-maven-plugin</artifactId>-->
-              <!--<version>2.0.3</version>-->
-          <!--</plugin>-->
-
-          <!--<plugin>-->
-              <!--<artifactId>maven-assembly-plugin</artifactId>-->
-              <!--<version>2.5.5</version>-->
-              <!--<configuration>-->
-                  <!--<archive>-->
-                      <!--<manifest>-->
-                          <!--<mainClass>com.rdnsn.b2intgr.MainApp</mainClass>-->
-                      <!--</manifest>-->
-                  <!--</archive>-->
-                  <!--<descriptorRefs>-->
-                      <!--<descriptorRef>jar-with-dependencies</descriptorRef>-->
-                  <!--</descriptorRefs>-->
-              <!--</configuration>-->
-              <!--<executions>-->
-                  <!--<execution>-->
-                      <!--<id>make-assembly</id>-->
-                      <!--<phase>package</phase>-->
-                      <!--<goals>-->
-                          <!--<goal>single</goal>-->
-                      <!--</goals>-->
-                  <!--</execution>-->
-              <!--</executions>-->
-          <!--</plugin>-->
-
 
           <plugin>
               <groupId>org.apache.maven.plugins</groupId>
@@ -423,6 +356,7 @@
                               </transformer>
                           </transformers>
                           <filters>
+							  <!-- Required in order to SKIP the checking of signed jar-files -->
                               <filter>
                                   <artifact>*:*</artifact>
                                   <excludes>
@@ -431,38 +365,6 @@
                                       <exclude>META-INF/*.RSA</exclude>
                                   </excludes>
                               </filter>
-                          <!--<filter>-->
-                              <!--<artifact>org.apache.logging.log4j:log4j-slf4j-impl</artifact>-->
-                              <!--<includes>-->
-                                  <!--<include>**</include>-->
-                              <!--</includes>-->
-                          <!--</filter>-->
-                          <!--<filter>-->
-                              <!--<artifact>org.apache.logging.log4j:log4j-api</artifact>-->
-                              <!--<includes>-->
-                                  <!--<include>**</include>-->
-                              <!--</includes>-->
-                          <!--</filter>-->
-
-                          <!--<filter>-->
-                              <!--<artifact>org.apache.logging.log4j:log4j-core</artifact>-->
-                              <!--<includes>-->
-                                  <!--<include>**</include>-->
-                              <!--</includes>-->
-                          <!--</filter>-->
-
-                          <!--<filter>-->
-                              <!--<artifact>commons-logging:commons-logging</artifact>-->
-                              <!--<includes>-->
-                                  <!--<include>**</include>-->
-                              <!--</includes>-->
-                          <!--</filter>-->
-                              <!--<filter>-->
-                                  <!--<artifact>org.apache.camel.component:http4</artifact>-->
-                                  <!--<includes>-->
-                                      <!--<include>**</include>-->
-                                  <!--</includes>-->
-                              <!--</filter>-->
                           </filters>
                       </configuration>
                   </execution>

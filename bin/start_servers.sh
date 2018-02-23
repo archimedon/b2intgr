@@ -2,7 +2,6 @@
 
 PRG="$0"
 
-JAR_FILE='target/b2intgr-0.0.1-jar-with-dependencies.jar'
 JAR_FILE='target/b2intgr-0.0.1.jar'
 
 JAVA_CMD="`which java` -jar"
@@ -18,12 +17,15 @@ if [ -z $APP_HOME ]; then
     APP_HOME=./
 fi
 
-JTARGET="${APP_HOME}/${JAR_FILE} -DQPORT=$QUEUE_PORT"
+JTARGET="${APP_HOME}/${JAR_FILE}"
 NODE_CMD="$NODE_CMD ${APP_HOME}/index.js"
 
 if [ ! -f "$JTARGET" ]; then
-    do_mvn_build;
+    mvn clean compile package >/dev/null 2>&1
 fi
+
+# Add Java args
+JTARGET="${JTARGET} -DQPORT=$QUEUE_PORT";
 
 RUN_DIR="${APP_HOME}/run"
 
@@ -73,12 +75,9 @@ function start_node {
 #	return $PID
 }
 
-function do_mvn_build() {
-    mvn clean compile package >/dev/null 2>&1
-}
 
 
-function stop_zqueue() {
+function stop_zqueue {
 
   if [ ! -z "$ZQUEUE_PIDFILE" ]; then
     if [ -f $ZQUEUE_PIDFILE ]; then

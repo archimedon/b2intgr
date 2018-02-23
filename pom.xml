@@ -182,11 +182,6 @@
 			<artifactId>camel-jms</artifactId>
 		</dependency>
 
-		<!--<dependency>-->
-			<!--<groupId>org.apache.camel</groupId>-->
-			<!--<artifactId>camel-spring</artifactId>-->
-		<!--</dependency>-->
-
 		<dependency>
 			<groupId>org.apache.activemq</groupId>
 			<artifactId>activemq-client</artifactId>
@@ -209,13 +204,8 @@
 
 		<!--<dependency>-->
 			<!--<groupId>org.apache.activemq</groupId>-->
-			<!--<artifactId>activemq-spring</artifactId>-->
+			<!--<artifactId>activemq-kahadb-store</artifactId>-->
 		<!--</dependency>-->
-
-		<dependency>
-			<groupId>org.apache.activemq</groupId>
-			<artifactId>activemq-kahadb-store</artifactId>
-		</dependency>
 	<!--
 	 		<dependency>
 				<groupId>org.apache.activemq</groupId>
@@ -237,17 +227,6 @@
 			<groupId>org.apache.xbean</groupId>
 			<artifactId>xbean-spring</artifactId>
 		</dependency>
-		<!--<dependency>-->
-			<!--<groupId>org.springframework</groupId>-->
-			<!--<artifactId>spring-context</artifactId>-->
-		<!--</dependency>-->
-<!-- 
-		<dependency>
-			<groupId>org.apache.logging.log4j</groupId>
-			<artifactId>log4j-1.2-api</artifactId>
-			<scope>test</scope>
-		</dependency>
- -->		
 
     <!-- logging -->
     <dependency>

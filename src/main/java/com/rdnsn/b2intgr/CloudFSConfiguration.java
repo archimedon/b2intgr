@@ -119,12 +119,6 @@ public class CloudFSConfiguration {
 
     public void setDocRoot(String docRoot) {
         this.docRoot = docRoot;
-        File f = new File(docRoot);
-        if (!f.exists()) {
-            System.err.println((f.mkdirs() ? "Made temp directory " : "Make temp dir failed: ") + f.getPath());
-        } else {
-            System.err.println("Directory exists: " + f.getPath());
-        }
     }
 
     public String getHost() {

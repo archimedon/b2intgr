@@ -1,8 +1,13 @@
 package com.rdnsn.b2intgr;
 
 import java.io.*;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
@@ -10,6 +15,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.util.jndi.JndiContext;
+import org.apache.commons.beanutils.BeanUtils;
 import org.apache.commons.lang.StringUtils;
 
 import com.fasterxml.jackson.core.JsonParseException;
@@ -25,6 +31,8 @@ import com.rdnsn.b2intgr.route.ZRouteBuilder;
  */
 public class MainApp {
 
+    private static final String ENV_PREFIX = "B2I_";
+    private static final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";
     private final ObjectMapper objectMapper;
     private final CloudFSConfiguration serviceConfig;
 
@@ -40,9 +48,8 @@ public class MainApp {
 
     private boolean noToken(String authorizationToken) {
         return
-                StringUtils.isBlank(authorizationToken) || (utcInSecs() - lastmod) >= TTL;
+            StringUtils.isBlank(authorizationToken) || (utcInSecs() - lastmod) >= TTL;
     }
-
 
     private long utcInSecs() {
         return new Date().getTime() / 1000;
@@ -51,9 +58,70 @@ public class MainApp {
 
     public MainApp(String[] args) throws IOException {
         this.objectMapper = new ObjectMapper();
-        this.serviceConfig =  objectMapper.readValue(
-                getClass().getResourceAsStream("/config.json"), CloudFSConfiguration.class);
-//        this.serviceConfig = objectMapper.readValue(new FileInputStream(configFile), CloudFSConfiguration.class);
+        this.serviceConfig = getSettings();
+
+        File f = new File(serviceConfig.getDocRoot());
+        if (!f.exists()) {
+            System.err.println((f.mkdirs() ? "Made DocRoot directory " : "Make DocRoot directory failed: ") + f.getPath());
+        } else {
+            System.err.println("DocRoot directory exists: " + f.getPath());
+        }
+    }
+
+
+    private String readStream(InputStream stream) throws IOException {
+        ByteArrayOutputStream into = new ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+
+        for (int n = -1; 0 < (n = stream.read(buf)); into.write(buf, 0, n)){}
+        into.close();
+        return into.toString();
+
+    }
+    private CloudFSConfiguration getSettings() throws IOException {
+
+        String confFile = readStream(getClass().getResourceAsStream("/config.json"));
+        confFile = injectExtern(confFile);
+
+        CloudFSConfiguration confObject = objectMapper.readValue(confFile, CloudFSConfiguration.class);
+
+        doEnvironmentOverrides(confObject, confFile);
+
+        return confObject;
+
+
+    }
+
+    private void doEnvironmentOverrides(CloudFSConfiguration confObject, String confFile) throws IOException {
+
+        Map<String, Object> map = objectMapper.readValue(confFile, HashMap.class);
+
+        map.keySet().forEach( k -> {
+            String ev = null;
+            if ( (ev = System.getenv(ENV_PREFIX + k)) != null) {
+                try {
+                    BeanUtils.setProperty(confObject, k, ev);
+                    System.err.println(String.format("Override config['%s'] with env['%s']", k , ENV_PREFIX + k));
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (InvocationTargetException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+    }
+
+    private String injectExtern(String confFile) {
+        Matcher m = Pattern.compile(CONFIG_ENV_PATTERN).matcher(confFile);
+        String tmp = null;
+        while (m.find()) {
+            tmp = System.getenv(m.group(1));
+            if (tmp != null && tmp.length() > 0) {
+                confFile = m.replaceAll(tmp);
+            }
+        }
+
+        return confFile;
     }
 
     public static void main(String[] args) throws Exception {
@@ -64,10 +132,7 @@ public class MainApp {
 
     private void writeConnectionString() throws Exception {
         String buf = String.format("http://%s:%d%s", InetAddress.getLocalHost().getHostAddress(), serviceConfig.getPort(), serviceConfig.getContextUri());
-        FileOutputStream fo = new FileOutputStream(new File(serviceConfig.getDocRoot(), "queue_url.txt"));
-        System.err.println("Url: " + buf);
-        fo.write(buf.getBytes());
-        fo.close();
+        System.err.println("Listening on: " + buf);
     }
 
     public void boot() throws Exception {
@@ -79,13 +144,13 @@ public class MainApp {
         );
 
         jndiContext.bind("authAgent", authAgent);
-        jndiContext.bind("makeRes", (AggregationStrategy)(Exchange original, Exchange resource) -> {
-            if (resource != null) {  original.getOut().copyFrom(resource.getIn()); }
-            return original;
-        });
+//        jndiContext.bind("makeRes", (AggregationStrategy)(Exchange original, Exchange resource) -> {
+//            if (resource != null) {  original.getOut().copyFrom(resource.getIn()); }
+//            return original;
+//        });
 
         CamelContext camelContext = new DefaultCamelContext(jndiContext);
-        camelContext.addComponent("activemq", ActiveMQComponent.activeMQComponent("vm://localhost?broker.persistent=false"));
+//        camelContext.addComponent("activemq", ActiveMQComponent.activeMQComponent("vm://localhost?broker.persistent=false"));
         camelContext.addRoutes(new ZRouteBuilder(objectMapper, serviceConfig, authAgent));
         camelContext.start();
     }

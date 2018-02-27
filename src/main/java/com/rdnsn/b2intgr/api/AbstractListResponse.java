@@ -1,8 +1,6 @@
 package com.rdnsn.b2intgr.api;
 
-import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonSetter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,7 +37,6 @@ public abstract class AbstractListResponse<E extends B2BaseFile> extends B2Reads
         return files;
     }
 
-    //JsonSetter(value = "files")
     public <T extends AbstractListResponse<E>> T setFiles(List<E> files) {
         this.files = files;
         return (T) this;
@@ -63,7 +60,6 @@ public abstract class AbstractListResponse<E extends B2BaseFile> extends B2Reads
      */
     public <T extends AbstractListResponse<E>> T setMakeDownloadUrl(Function<E, String> makeDownloadUrl) {
         this.makeDownloadUrl = makeDownloadUrl;
-//            applyUrlFormat();
         return (T) this;
     }
 

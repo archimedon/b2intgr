@@ -1,11 +1,7 @@
 package com.rdnsn.b2intgr.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-
-import java.io.Serializable;
 
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
@@ -22,15 +18,4 @@ public class FileResponse extends B2SimpleErrorFile implements ReadsError, B2Bas
             .setFileName(fdat.getFileName())
             .setDownloadUrl(fdat.getDownloadUrl());
     }
-//    @JsonInclude(JsonInclude.Include.NON_NULL)
-//    public ErrorObject getError() {
-//        return error;
-//    }
-
-//    public FileResponse setError(ErrorObject error) {
-//        this.error = error;
-//        return this;
-//    }
-
-
 }

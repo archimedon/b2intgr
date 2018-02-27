@@ -39,19 +39,16 @@ public class B2ReadsError implements ReadsError {
         return this;
     }
 
-//    JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonIgnore
     public String getCode() {
         return (String) (error == null ? null : error.getCode());
     }
 
-//    JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonIgnore
     public Integer getStatus() {
         return (Integer) (error == null ? null : error.getStatus());
     }
 
-//    JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonIgnore
     public String getMessage() {
         return (String) (error == null ? null : error.getMessage());

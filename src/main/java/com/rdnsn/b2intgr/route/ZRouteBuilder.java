@@ -13,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
 import java.util.List;
 
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -25,6 +26,7 @@ import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.http4.HttpMethods;
 
+import org.apache.camel.http.common.HttpMessage;
 import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
@@ -51,6 +53,8 @@ import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.processor.UploadException;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
 
+import javax.servlet.http.HttpServletRequest;
+
 /**
  * Base Router
  */
@@ -68,7 +72,8 @@ public class ZRouteBuilder extends RouteBuilder {
     private final String ppath_list_file_vers = "/b2api/v1/b2_list_file_versions" + HTTP4_PARAMS;
     private final String ppath_list_buckets = "/b2api/v1/b2_list_buckets" + HTTP4_PARAMS;
     private String ppath_list_file_names = "/b2api/v1/b2_list_file_names";
-    
+    private String servicePath = "/file";
+
     // // TODO: 2/13/18 url-encode the downloadURL
     public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) {
 		super();
@@ -358,7 +363,37 @@ public class ZRouteBuilder extends RouteBuilder {
                 .outType(DeleteFilesResponse.class)
 				.bindingMode(RestBindingMode.auto)
 				.produces("application/json")
-				.to("direct:rest.rm_files");
+				.to("direct:rest.rm_files")
+
+            // Download
+            .get(servicePath + "/?matchOnUriPrefix=true")
+                .route()
+                .process(new Processor() {
+                    public void process(Exchange exchange) throws Exception {
+                        Map<String, Object> hdrs = exchange.getIn().getHeaders();
+                        hdrs.entrySet().forEach( entry -> System.err.println(
+                                String.format("k: %s\nv: %s -> %s",  entry.getKey(), entry.getValue(),  entry.getValue().getClass())
+                        ));
+//                        HttpServletRequest request = exchange.getIn(HttpMessage.class).getRequest();
+//                        HttpServletRequest request = exchange.getIn().getBody(HttpServletRequest.class);
+                        org.restlet.engine.adapter.HttpRequest request = exchange.getIn().getHeader("CamelRestletRequest", org.restlet.engine.adapter.HttpRequest.class);
+                        String uri = request.getHttpCall().getRequestUri();
+                        String ctx = serviceConfig.getContextUri() + servicePath + "/";
+
+                        String path = uri.substring(uri.indexOf(ctx) + ctx.length());
+
+//                        findFileInDocRoot(path);
+//                        String id = exchange.getIn().getHeader("id", String.class);
+                        exchange.getOut().setBody(path + ";Donald Duck");
+                    }
+                }).endRest();
+//                .description("File reference")
+//                .bindingMode(RestBindingMode.off)
+//
+//				.to("direct:proxy")
+//                .produces("application/json")
+//                .to("direct:rest.list_buckets")
+
 
 
         /**

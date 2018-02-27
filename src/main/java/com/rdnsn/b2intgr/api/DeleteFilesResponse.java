@@ -1,15 +1,12 @@
 package com.rdnsn.b2intgr.api;
 
-import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
 
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)

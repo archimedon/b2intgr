@@ -84,7 +84,8 @@ public class UploadProcessor extends BaseProcessor {
 				getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS;
 		
 		final File file = userFile.getFilepath().toFile();
-		
+        final String sha1 = UploadProcessor.sha1(file);
+
 		final Message responseOut = producer.send(authdUploadUrl, innerExchg -> {
 			final Message postMessage = innerExchg.getIn();
 			postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
@@ -93,7 +94,6 @@ public class UploadProcessor extends BaseProcessor {
 			
 			postMessage.setHeader(Constants.X_BZ_FILE_NAME, userFile.getName());
 			
-			String sha1 = sha1(file);
 //			if (log.isDebugEnabled()) {
 //				corruptSomeHashes(sha1, exchange, file);
 //			}
@@ -119,6 +119,7 @@ public class UploadProcessor extends BaseProcessor {
 
 			try {
 				UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
+
 				exchange.getOut().copyFromWithNewBody(responseOut, ImmutableList.of(BeanUtils.describe(uploadResponse)));
 				exchange.getOut().setHeader(Constants.DOWNLOAD_URL, downloadUrl);
 			} catch (Exception e) {
@@ -147,7 +148,7 @@ public class UploadProcessor extends BaseProcessor {
 		}
 	}
 
-	private String sha1(final File file) {
+	public static String sha1(final File file) {
 		String ans = null;
 		try {
 			final MessageDigest messageDigest = MessageDigest.getInstance("SHA1");

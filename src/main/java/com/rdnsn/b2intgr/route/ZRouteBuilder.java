@@ -8,14 +8,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.HashMap;
 import java.util.List;
 
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
+import com.rdnsn.b2intgr.model.ProxyUrl;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
 import org.apache.camel.Message;
@@ -51,136 +54,11 @@ import com.rdnsn.b2intgr.processor.UploadException;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
 
 import static org.neo4j.driver.v1.Values.parameters;
+import static org.neo4j.driver.v1.Values.value;
 
 
 
 
-class UrlMapUpdater implements AutoCloseable
-{
-    private final Driver driver;
-
-    public UrlMapUpdater( String uri, String user, String password )
-    {
-        driver = GraphDatabase.driver( uri, AuthTokens.basic( user, password ) );
-    }
-
-    @Override
-    public void close() throws Exception
-    {
-        driver.close();
-    }
-
-    class ProxyUrl {
-        String proxy;
-        String actual;
-        boolean isFinal = false;
-
-        ProxyUrl(String proxy, String actual, boolean isFinal) {
-            this.proxy = proxy;
-            this.actual = actual;
-            this.isFinal = isFinal;
-        }
-
-        public String toString() {
-            return String.format("{ proxy: '%s', actual: '%s', isFinal: %b }", proxy, actual, isFinal);
-        }
-    }
-
-
-    public Object saveOrUpdateMapping (String proxy, String actual, boolean isFinal) {
-
-        return saveOrUpdateMapping(new ProxyUrl(proxy, actual, isFinal));
-    }
-
-    public Object saveOrUpdateMapping(final ProxyUrl message )
-    {
-        String alias = "p";
-
-        String findCypher = "MATCH (p:ProxyUrl) WHERE p.proxy = $proxy RETURN id(p)";
-
-        String updateCypher = "MATCH (p:ProxyUrl)" +
-                " WHERE id(p) = $id" +
-                " SET p.proxy = $proxy" +
-                " SET p.actual = $actual" +
-                " SET p.isFinal = $isFinal" +
-                " RETURN id(p)";
-        try ( Session session = driver.session() )
-        {
-                Object resData = session.writeTransaction( ( Transaction tx ) ->
-                {
-                    Long idResult = null;
-
-                    System.err.format("findCypher: %s%n", findCypher);
-
-                    StatementResult result = tx.run(
-                        findCypher,
-                        parameters("proxy", message.proxy )
-                    ) ;
-                    if (result.hasNext()) {
-
-                        Record res = result.single();
-                        idResult = res.size() > 0 ? res.get(0).asLong() : null;
-
-                        System.err.format("idResult: %s%n", idResult);
-
-
-
-                        System.err.format("updateCypher: %s%n", updateCypher);
-
-                        result = tx.run( updateCypher ,
-                                parameters(
-                                        "id", idResult,
-                                        "proxy", message.proxy,
-                                        "actual", message.actual,
-                                        "isFinal", message.isFinal));
-                        idResult = result.single().get( 0 ).asLong();
-
-
-                    }
-                    else {
-                        String createCypher = String.format("CREATE (p:ProxyUrl %s) RETURN id(p)",  message);
-                        System.err.format("createCypher: %s%n", createCypher);
-                        idResult = tx.run( createCypher ).single().get( 0 ).asLong();
-                    }
-                    return idResult;
-
-//
-//                    if (idResult == null) {
-//
-////                    String query = createCypher + " RETURN properties(p)";
-//                        String query = createCypher;
-//                        System.err.format("query: %s", query);
-//                        StatementResult result = tx.run( query );
-//                        idResult = result.single().get( 0 ).asLong();
-//                    }
-//                        System.err.format("query: %s", updateCypher);
-//                        result = tx.run( updateCypher ,
-//                                parameters(
-//                                    "id", idResult,
-//                                    "proxy", message.proxy,
-//                                    "actual", message.actual,
-//                                    "isFinal", message.isFinal));
-//                        idResult = result.single().get( 0 ).asLong();
-
-//                    StatementResult result = tx.run( "CREATE (a:Greeting) " +
-//                                    "SET a.message = $message " +
-//                                    "RETURN a.message + ', from node ' + id(a)",
-//                            parameters( "message", message ) );
-//                    return result.single().get( 0 ).asMap();
-
-            } );
-            return resData;
-        }
-    }
-
-    public static void main( String... args ) throws Exception
-    {
-        try ( UrlMapUpdater greeter = new UrlMapUpdater( "bolt://localhost:7687", "neo4j", "neo4j" ) )
-        {
-            greeter.saveOrUpdateMapping( "hello" , "world", false );
-        }
-    }
-}
 /**
  * Base Router
  */
@@ -316,7 +194,7 @@ public class ZRouteBuilder extends RouteBuilder {
 				// Send to b2
 				.wireTap("direct:b2upload")
 			.end()
-			.process(replyProxyUrls())
+			.process(new ReplyProxyUrls())
 		.end();
 
 		from("direct:b2upload").routeId("upload_facade")
@@ -333,6 +211,7 @@ public class ZRouteBuilder extends RouteBuilder {
 		from("direct:b2send").routeId("atomic_upload")
 			.errorHandler(noErrorHandler())
 			.process(new UploadProcessor(serviceConfig, objectMapper))
+            .process(new PersistMapping())
 		.end();
 
 		from("direct:list_buckets")
@@ -432,24 +311,28 @@ public class ZRouteBuilder extends RouteBuilder {
     }
 
     // TODO: 2/10/18 save URL mapping to DB or file
-    private Processor replyProxyUrls() {
-		return new Processor() {
+    class ReplyProxyUrls implements Processor {
 
-			@Override
-			public void process(Exchange exchange) throws IOException {
 
-				UploadData obj = exchange.getIn().getBody(UploadData.class);
-				String sjson = objectMapper.writeValueAsString(
-					obj.getFiles().stream().collect(Collectors.toMap((UserFile x) -> {
-						return x.getFilepath().toUri().toString().replaceFirst(
-                        "file://" + serviceConfig.getDocRoot(),
-                        serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
-                        );
-					}, uf -> uf.getName()))
+        @Override
+        public void process(Exchange exchange) throws IOException {
+
+            UploadData obj = exchange.getIn().getBody(UploadData.class);
+
+
+                String sjson = objectMapper.writeValueAsString(
+                        obj.getFiles().stream().collect(Collectors.toMap((UserFile x) -> {
+                    return x.getFilepath().toUri().toString().replaceFirst(
+                            "file://" + serviceConfig.getDocRoot(),
+                            serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+                    );
+
+
+
+                    }, uf -> uf.getName()))
 				);
 				exchange.getOut().setBody(sjson);
 			}
-		};
 	}
 
 	private RestDefinition defineRestServer() {
@@ -509,7 +392,8 @@ public class ZRouteBuilder extends RouteBuilder {
                         ));
 //                        HttpServletRequest request = exchange.getIn(HttpMessage.class).getRequest();
 //                        HttpServletRequest request = exchange.getIn().getBody(HttpServletRequest.class);
-                        org.restlet.engine.adapter.HttpRequest request = exchange.getIn().getHeader("CamelRestletRequest", org.restlet.engine.adapter.HttpRequest.class);
+                        org.restlet.engine.adapter.HttpRequest request
+                                = exchange.getIn().getHeader("CamelRestletRequest", org.restlet.engine.adapter.HttpRequest.class);
                         String uri = request.getHttpCall().getRequestUri();
                         String ctx = serviceConfig.getContextUri() + servicePath + "/";
 
@@ -602,8 +486,12 @@ public class ZRouteBuilder extends RouteBuilder {
                                     "file://" + serviceConfig.getDocRoot(),
                                     serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
                             );
-                            Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(dwn , dwn, false );
-                                log.info("update id: {}" , id);
+                            UploadProcessor.sha1(uf.getFilepath().toFile());
+
+                            ProxyUrl p = new ProxyUrl(dwn , UploadProcessor.sha1(uf.getFilepath().toFile()));
+                            Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(p);
+
+                            log.info("update id: {}" , id);
                             uf.setName(id.toString());
                             item.delete();
                             uploadData.addFile(uf);
@@ -628,6 +516,117 @@ public class ZRouteBuilder extends RouteBuilder {
 			return (T) exchange.getIn().getBody(UploadData.class)
                     .getFiles().iterator();
 		}
-	}		
+	}
+    private class UrlMapUpdater implements AutoCloseable
+    {
+        private final Driver driver;
 
+        public UrlMapUpdater( String uri, String user, String password )
+        {
+            driver = GraphDatabase.driver( uri, AuthTokens.basic( user, password ) );
+        }
+
+        @Override
+        public void close() { driver.close(); }
+
+
+        public Object saveOrUpdateMapping (String proxy, String actual, boolean b2Complete) {
+
+            return saveOrUpdateMapping(new ProxyUrl(proxy, actual, b2Complete));
+        }
+
+        public Object saveOrUpdateMapping(final ProxyUrl message )
+        {
+            String alias = "p";
+
+            String findCypher = message.getSha1() == null
+                ? String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN id(p)", message.getProxy())
+                : String.format("MATCH (p:ProxyUrl) WHERE p.sha1 = \"%s\" RETURN id(p)", message.getSha1());
+
+            try ( Session session = driver.session() )
+            {
+                Object resData = session.writeTransaction( ( Transaction tx ) ->
+                {
+                    Long idResult = null;
+
+                    System.err.format("findCypher: %s%n", findCypher);
+
+                    StatementResult result = tx.run(findCypher) ;
+                    if (result.hasNext()) {
+
+                        Record res = result.single();
+                        idResult = res.size() > 0 ? res.get(0).asLong() : null;
+
+                        System.err.format("idResult: %s%n", idResult);
+                        try {
+
+                            // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
+                            Map<String, Object> valMap = objectMapper.readValue(message.toString(), HashMap.class);
+
+                            String updateCypher = String.format("MATCH (p:ProxyUrl) WHERE id(p) = %d", idResult)  +
+                                valMap.entrySet().stream()
+                                    .filter(ent -> ent.getValue() != null)
+                                    .map( ent -> String.format(" SET p.%s = $%s", ent.getKey(), ent.getKey()))
+                                    .collect(Collectors.joining()) +
+                                " RETURN id(p)";
+
+                            System.err.format("updateCypher: %s%n", updateCypher);
+
+                            result = tx.run(
+                                updateCypher,
+                                // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
+                                value(valMap)
+                            );
+                            idResult = result.single().get( 0 ).asLong();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    else {
+                        String createCypher = String.format("CREATE (p:ProxyUrl %s) RETURN id(p)",  message);
+                        System.err.format("createCypher: %s%n", createCypher);
+                        idResult = tx.run( createCypher ).single().get( 0 ).asLong();
+                    }
+                    return idResult;
+                } );
+                return resData;
+            }
+        }
+    }
+
+    private class PersistMapping implements Processor {
+
+        @Override
+        public void process(Exchange exchange) throws Exception {
+            UploadFileResponse uploadResponse = exchange.getIn().getBody(UploadFileResponse.class);
+            final String downloadUrl = exchange.getIn().getHeader(Constants.DOWNLOAD_URL, String.class);
+
+
+            uploadResponse.getContentSha1()
+
+            Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(dwn , dwn, false );
+
+            try ( UrlMapUpdater proxyMapUpdater = new UrlMapUpdater( "bolt://localhost:7687", "neo4j", "reggae" ) )
+            {
+                ProxyUrl p = new ProxyUrl(uploadResponse. downloadUrl )
+                    final String dwn = uploadResponse. .getFilepath().toUri().toString().replaceFirst(
+
+                            "file://" + serviceConfig.getDocRoot(),
+                            serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+                    );
+                    Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(dwn , dwn, false );
+
+
+                })
+                        .collect(Collectors.toMap((UserFile x) -> {
+                            return x.getFilepath().toUri().toString().replaceFirst(
+                                    "file://" + serviceConfig.getDocRoot(),
+                                    serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+                            );
+
+                            log.info("update id: {}" , id);
+
+                        }
+        }
+    }
 }

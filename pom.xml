@@ -18,6 +18,7 @@
 		<graphdb.password>reggae</graphdb.password>
 		<javax_validation.version>2.0.0.Final</javax_validation.version>
 		<jbossjta.version>4.16.6.Final</jbossjta.version>
+        <neo4j.version>3.3.3</neo4j.version>
 	</properties>
 
 	<repositories>
@@ -44,6 +45,14 @@
 			</snapshots>
 		</repository>
 
+        <repository>
+            <id>spring-libs-release</id>
+            <name>Spring Releases</name>
+            <url>https://repo.spring.io/libs-release</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
 	</repositories>
 
 	<dependencyManagement>
@@ -67,18 +76,76 @@
 			</dependency>
 
 			<!-- HIBERNATE OGM -->
-			<dependency>
-				<groupId>org.hibernate.ogm</groupId>
-				<artifactId>hibernate-ogm-bom</artifactId>
-				<version>5.2.0.Beta1</version>
-				<type>pom</type>
-				<scope>import</scope>
-			</dependency>
+			<!--<dependency>-->
+				<!--<groupId>org.hibernate.ogm</groupId>-->
+				<!--<artifactId>hibernate-ogm-bom</artifactId>-->
+				<!--<version>5.2.0.Beta1</version>-->
+				<!--<type>pom</type>-->
+				<!--<scope>import</scope>-->
+			<!--</dependency>-->
 
 		</dependencies>
 	</dependencyManagement>
 
 	<dependencies>
+        <!--<dependency>-->
+            <!--<groupId>org.neo4j</groupId>-->
+            <!--<artifactId>neo4j-bolt</artifactId>-->
+            <!--<version>${neo4j.version}</version>-->
+        <!--</dependency>-->
+
+        <!--<dependency>-->
+            <!--<groupId>org.neo4j</groupId>-->
+            <!--<artifactId>neo4j-ogm-http-driver</artifactId>-->
+            <!--&lt;!&ndash;<version>3.1.0</version>&ndash;&gt;-->
+            <!--<version>${neo4j.version}</version>-->
+        <!--</dependency>-->
+
+        <!-- https://mvnrepository.com/artifact/org.neo4j/neo4j-kernel -->
+        <!--<dependency>-->
+            <!--<groupId>org.neo4j</groupId>-->
+            <!--<artifactId>neo4j-kernel</artifactId>-->
+            <!--<version>3.3.3</version>-->
+        <!--</dependency>-->
+        <!-- https://mvnrepository.com/artifact/org.neo4j/neo4j-community -->
+        <!--<dependency>-->
+            <!--<groupId>org.neo4j</groupId>-->
+            <!--<artifactId>neo4j-community</artifactId>-->
+            <!--<version>${neo4j.version}</version>-->
+            <!--<type>pom</type>-->
+        <!--</dependency>-->
+        <!-- https://mvnrepository.com/artifact/org.neo4j/neo4j -->
+        <!--<dependency>-->
+            <!--<groupId>org.neo4j</groupId>-->
+            <!--<artifactId>neo4j</artifactId>-->
+            <!--<version>3.3.3</version>-->
+        <!--</dependency>-->
+        <!-- https://mvnrepository.com/artifact/org.neo4j.driver/neo4j-java-driver -->
+        <dependency>
+            <groupId>org.neo4j.driver</groupId>
+            <artifactId>neo4j-java-driver</artifactId>
+            <version>1.5.0</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache-extras.camel-extra/camel-spring-neo4j -->
+        <!--<dependency>-->
+            <!--<groupId>org.apache-extras.camel-extra</groupId>-->
+            <!--<artifactId>camel-spring-neo4j</artifactId>-->
+            <!--<version>2.18.0</version>-->
+        <!--</dependency>-->
+        <!--<dependency>-->
+            <!--<groupId>org.springframework.data</groupId>-->
+            <!--<artifactId>spring-data-neo4j</artifactId>-->
+            <!--<version>5.0.4.RELEASE</version>-->
+        <!--</dependency>-->
+        <!-- https://mvnrepository.com/artifact/org.neo4j/neo4j-graphdb-api -->
+        <!--<dependency>-->
+            <!--<groupId>org.neo4j</groupId>-->
+            <!--<artifactId>neo4j-graphdb-api</artifactId>-->
+            <!--<version>${neo4j.version}</version>-->
+            <!--&lt;!&ndash;<version>3.2.3</version>&ndash;&gt;-->
+        <!--</dependency>-->
+
 <!-- temporary. Only for interim demo -->
 <dependency>
     <groupId>org.apache.camel</groupId>
@@ -93,21 +160,27 @@
 </dependency>
 
 		<!-- JPA annotations -->
-		<dependency>
-			<groupId>org.hibernate.javax.persistence</groupId>
-			<artifactId>hibernate-jpa-2.1-api</artifactId>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.hibernate.javax.persistence</groupId>-->
+			<!--<artifactId>hibernate-jpa-2.1-api</artifactId>-->
+		<!--</dependency>-->
 
 		<!-- hibernate-ogm-neo4j -->
-		<dependency>
-			<groupId>org.hibernate.ogm</groupId>
-			<artifactId>hibernate-ogm-neo4j</artifactId>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.hibernate.ogm</groupId>-->
+			<!--<artifactId>hibernate-ogm-neo4j</artifactId>-->
+		<!--</dependency>-->
 
-		<dependency>
-			<groupId>org.hibernate</groupId>
-			<artifactId>hibernate-search-orm</artifactId>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.hibernate</groupId>-->
+			<!--<artifactId>hibernate-search-orm</artifactId>-->
+		<!--</dependency>-->
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.7</version>
+        </dependency>
 
 		<!-- Validations -->
 		<dependency>
@@ -116,16 +189,16 @@
 			<version>${javax_validation.version}</version>
 		</dependency>
 
-		<dependency>
-			<groupId>org.jboss.jbossts</groupId>
-			<artifactId>jbossjta</artifactId>
-			<version>${jbossjta.version}</version>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.jboss.jbossts</groupId>-->
+			<!--<artifactId>jbossjta</artifactId>-->
+			<!--<version>${jbossjta.version}</version>-->
+		<!--</dependency>-->
 
-		<dependency>
-			<groupId>org.jboss.spec.javax.transaction</groupId>
-			<artifactId>jboss-transaction-api_1.2_spec</artifactId>
-		</dependency>
+		<!--<dependency>-->
+			<!--<groupId>org.jboss.spec.javax.transaction</groupId>-->
+			<!--<artifactId>jboss-transaction-api_1.2_spec</artifactId>-->
+		<!--</dependency>-->
 
 		<dependency>
 			<groupId>commons-lang</groupId>

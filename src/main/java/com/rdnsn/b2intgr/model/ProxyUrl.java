@@ -95,18 +95,18 @@ public class ProxyUrl {
     }
 
 //    @Override
-//    public String toString() {
-//        return String.format("{ " +
-//            "proxy: '%s', " +
-//            "actual: '%s', " +
-//            "b2Complete: %b " +
-//            "}",
-//            proxy, actual, b2Complete
-//        );
-//    }
-
     public String toString() {
-        return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
+        return String.format("{ " +
+            "proxy: '%s', " +
+            "actual: '%s', " +
+            "b2Complete: %b " +
+            "}",
+            proxy, actual, b2Complete
+        );
     }
+
+//    public String toString() {
+//        return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
+//    }
 
 }

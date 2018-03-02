@@ -1,7 +1,7 @@
 {
   "host": "localhost",
   "port": 8080,
-  "contextUri": "/cloudfs/api",
+  "contextUri": "/cloudfs/api/v1",
   "docRoot": "/tmp/b2intgr",
   "protocol": "http",
   "customSeparator": "\\^",

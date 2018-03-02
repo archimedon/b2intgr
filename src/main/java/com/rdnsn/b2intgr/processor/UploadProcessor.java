@@ -7,15 +7,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
-import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.http4.HttpMethods;
 import org.apache.commons.beanutils.BeanUtils;
@@ -85,14 +84,17 @@ public class UploadProcessor extends BaseProcessor {
 		
 		final File file = userFile.getFilepath().toFile();
         final String sha1 = UploadProcessor.sha1(file);
+        int rootLen = Paths.get(serviceConfig.getDocRoot()).getNameCount();
 
 		final Message responseOut = producer.send(authdUploadUrl, innerExchg -> {
 			final Message postMessage = innerExchg.getIn();
 			postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-			
-			log.info("\"Upload\":{ \"{}\": \"{}\"}", Constants.X_BZ_FILE_NAME, userFile.getName());
-			
-			postMessage.setHeader(Constants.X_BZ_FILE_NAME, userFile.getName());
+
+
+			String BZ_FILE_NAME = userFile.getFilepath().subpath(rootLen , userFile.getFilepath().getNameCount()).toString();
+			log.info("\"Upload\":{ \"{}\": \"{}\"}", Constants.X_BZ_FILE_NAME, BZ_FILE_NAME);
+
+			postMessage.setHeader(Constants.X_BZ_FILE_NAME, BZ_FILE_NAME);
 			
 //			if (log.isDebugEnabled()) {
 //				corruptSomeHashes(sha1, exchange, file);
@@ -109,11 +111,13 @@ public class UploadProcessor extends BaseProcessor {
 		producer.stop();
 		final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
-		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getName());
+		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getUrl());
 
 		if (HttpStatus.SC_OK == code) {
 			final String downloadUrl =  String.format("%s/file/%s/%s",
-					remoteAuth.getDownloadUrl(), serviceConfig.getRemoteStorageConf().getBucketName(), userFile.getName());
+					remoteAuth.getDownloadUrl(),
+                    serviceConfig.getRemoteStorageConf().getBucketName(),
+                    userFile.getFilepath().subpath(rootLen, userFile.getFilepath().getNameCount()).toString());
 			
 			log.info("Completed: '{}'", downloadUrl);
 
@@ -127,7 +131,7 @@ public class UploadProcessor extends BaseProcessor {
 			}
 		}
 		else {
-			throw new UploadException("Response code fail (" + code + ") File '" + userFile.getName() +"' not uploaded" );
+			throw new UploadException("Response code fail (" + code + ") File '" + userFile.getUrl() +"' not uploaded" );
 		}
 	}
 

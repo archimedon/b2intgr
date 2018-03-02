@@ -30,7 +30,7 @@ public class CloudFSConfiguration {
 
     @NotNull
     @JsonProperty
-    private String contextUri = "cloudfs/api";
+    private String contextUri = "cloudfs/api/v1";
 
     @NotNull
     @JsonProperty

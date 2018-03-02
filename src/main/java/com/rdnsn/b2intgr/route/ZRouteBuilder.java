@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
@@ -33,7 +32,6 @@ import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.neo4j.driver.v1.*;
 import org.restlet.data.MediaType;
@@ -53,7 +51,6 @@ import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.processor.UploadException;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
 
-import static org.neo4j.driver.v1.Values.parameters;
 import static org.neo4j.driver.v1.Values.value;
 
 
@@ -320,18 +317,18 @@ public class ZRouteBuilder extends RouteBuilder {
             UploadData obj = exchange.getIn().getBody(UploadData.class);
 
 
-                String sjson = objectMapper.writeValueAsString(
-                        obj.getFiles().stream().collect(Collectors.toMap((UserFile x) -> {
-                    return x.getFilepath().toUri().toString().replaceFirst(
-                            "file://" + serviceConfig.getDocRoot(),
-                            serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
-                    );
-
-
-
-                    }, uf -> uf.getName()))
-				);
-				exchange.getOut().setBody(sjson);
+//                String sjson = objectMapper.writeValueAsString(
+//                        obj.getFiles().stream().collect(Collectors.toMap((UserFile x) -> {
+//                    return x.getFilepath().toUri().toString().replaceFirst(
+//                            "file://" + serviceConfig.getDocRoot(),
+//                            serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+//                    );
+//
+//
+//
+//                    }, uf -> uf.getUrl()))
+//				);
+				exchange.getOut().setBody(obj.getFiles());
 			}
 	}
 
@@ -462,9 +459,18 @@ public class ZRouteBuilder extends RouteBuilder {
 				if (!items.isEmpty()) {
 
 					uploadData = new UploadData();
+                    String endpointHost = String.format("%s://%s:%d%s",
+                        serviceConfig.getProtocol(),
+                        serviceConfig.getHost(),
+                        serviceConfig.getPort(),
+                        serviceConfig.getContextUri()
+                    );
 
                     try ( UrlMapUpdater proxyMapUpdater = new UrlMapUpdater( "bolt://localhost:7687", "neo4j", "reggae" ) )
                     {
+                        String httpURL = null;
+                        int rootLen = Paths.get(serviceConfig.getDocRoot()).getNameCount();
+
 					for (FileItem item : items) {
 						if (item.isFormField()) {
 							uploadData.putFormField(item.getFieldName(), item.getString());
@@ -472,30 +478,35 @@ public class ZRouteBuilder extends RouteBuilder {
 							String pathFromUser = item.getFieldName();
 
 							Path destination = Paths.get(destDirBase + File.separatorChar + pathFromUser, item.getName());
+
 							Files.createDirectories(destination.getParent());
-							log.info("\"Received file\":{ \"name\": \"{}\", \"Size\": \"{}\"}", item.getName(), item.getSize());
+
 							Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
 
-							UserFile uf = new UserFile(destination, StringUtils.isBlank(item.getFieldName())
-                                ? contextId
-                                : contextId + File.separatorChar + pathFromUser + File.separatorChar
-                                            + URLEncoder.encode(destination.getFileName().toString(), Constants.UTF_8));
+//                            httpURL = endpointHost + "/file/" +
+//                                    URLEncoder.encode(destination.getFileName().toString(), Constants.UTF_8);
 
-							uf.setContentType(item.getContentType());
-							final String dwn = uf.getFilepath().toUri().toString().replaceFirst(
-                                    "file://" + serviceConfig.getDocRoot(),
-                                    serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+                            httpURL =  String.format("%s/file/%s/%s",
+                                endpointHost,
+                                destination.subpath(rootLen, destination.getNameCount()).toString(),
+                                URLEncoder.encode(destination.getFileName().toString(), Constants.UTF_8)
                             );
-                            UploadProcessor.sha1(uf.getFilepath().toFile());
 
-                            ProxyUrl p = new ProxyUrl(dwn , UploadProcessor.sha1(uf.getFilepath().toFile()));
-                            Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(p);
+                            UserFile uf = new UserFile(destination)
+                                .setContentType(item.getContentType())
+                                .setUrl(httpURL);
+
+
+                            Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(
+                                new ProxyUrl(httpURL, uf.getSha1())
+                                    .setContentType(uf.getContentType())
+                                    .setSize(destination.toFile().length())
+                            );
 
                             log.info("update id: {}" , id);
-                            uf.setName(id.toString());
+                            uf.setTransientId(id);
                             item.delete();
                             uploadData.addFile(uf);
-
                         }
                     }
                     } catch (Exception e) {
@@ -530,10 +541,6 @@ public class ZRouteBuilder extends RouteBuilder {
         public void close() { driver.close(); }
 
 
-        public Object saveOrUpdateMapping (String proxy, String actual, boolean b2Complete) {
-
-            return saveOrUpdateMapping(new ProxyUrl(proxy, actual, b2Complete));
-        }
 
         public Object saveOrUpdateMapping(final ProxyUrl message )
         {
@@ -601,32 +608,32 @@ public class ZRouteBuilder extends RouteBuilder {
             UploadFileResponse uploadResponse = exchange.getIn().getBody(UploadFileResponse.class);
             final String downloadUrl = exchange.getIn().getHeader(Constants.DOWNLOAD_URL, String.class);
 
-
-            uploadResponse.getContentSha1()
-
-            Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(dwn , dwn, false );
-
-            try ( UrlMapUpdater proxyMapUpdater = new UrlMapUpdater( "bolt://localhost:7687", "neo4j", "reggae" ) )
-            {
-                ProxyUrl p = new ProxyUrl(uploadResponse. downloadUrl )
-                    final String dwn = uploadResponse. .getFilepath().toUri().toString().replaceFirst(
-
-                            "file://" + serviceConfig.getDocRoot(),
-                            serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
-                    );
-                    Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(dwn , dwn, false );
-
-
-                })
-                        .collect(Collectors.toMap((UserFile x) -> {
-                            return x.getFilepath().toUri().toString().replaceFirst(
-                                    "file://" + serviceConfig.getDocRoot(),
-                                    serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
-                            );
-
-                            log.info("update id: {}" , id);
-
-                        }
+//
+//            uploadResponse.getContentSha1()
+//
+//            Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(dwn , dwn, false );
+//
+//            try ( UrlMapUpdater proxyMapUpdater = new UrlMapUpdater( "bolt://localhost:7687", "neo4j", "reggae" ) )
+//            {
+//                ProxyUrl p = new ProxyUrl(uploadResponse. downloadUrl )
+//                    final String dwn = uploadResponse. .getFilepath().toUri().toString().replaceFirst(
+//
+//                            "file://" + serviceConfig.getDocRoot(),
+//                            serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+//                    );
+//                    Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(dwn , dwn, false );
+//
+//
+//                })
+//                        .collect(Collectors.toMap((UserFile x) -> {
+//                            return x.getFilepath().toUri().toString().replaceFirst(
+//                                    "file://" + serviceConfig.getDocRoot(),
+//                                    serviceConfig.getProtocol() + "://" + serviceConfig.getHost()
+//                            );
+//
+//                            log.info("update id: {}" , id);
+//
+//                        }
         }
     }
 }

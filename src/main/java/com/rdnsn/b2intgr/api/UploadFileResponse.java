@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
-
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -18,6 +17,19 @@ public class UploadFileResponse extends B2FileItem {
 
     @JsonProperty
 	private String contentSha1;
+
+	@JsonProperty
+	private Long transientId;
+
+
+	public Long getTransientId() {
+		return transientId;
+	}
+
+	public UploadFileResponse setTransientId(Long transientId) {
+		this.transientId = transientId;
+		return this;
+	}
 
 	public String getContentSha1() {
 		return contentSha1;

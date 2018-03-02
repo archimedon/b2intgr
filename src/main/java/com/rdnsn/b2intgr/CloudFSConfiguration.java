@@ -22,6 +22,10 @@ public class CloudFSConfiguration {
 
     @NotNull
     @JsonProperty
+    private Neo4JConfiguration neo4jConf;
+
+    @NotNull
+    @JsonProperty
     private String host = "localhost";
 
     @NotNull
@@ -64,6 +68,15 @@ public class CloudFSConfiguration {
     @JsonProperty
     private int maxPoolSize = 10; // max number of clients in pool
 
+
+    public Neo4JConfiguration getNeo4jConf() {
+        return neo4jConf;
+    }
+
+    public CloudFSConfiguration setNeo4jConf(Neo4JConfiguration neo4jConf) {
+        this.neo4jConf = neo4jConf;
+        return this;
+    }
 
     public int getPoolSize() {
         return poolSize;

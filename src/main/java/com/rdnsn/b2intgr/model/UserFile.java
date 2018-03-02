@@ -1,6 +1,7 @@
 package com.rdnsn.b2intgr.model;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 
 import com.rdnsn.b2intgr.processor.UploadProcessor;
@@ -19,17 +20,33 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 	
 	private Path filepath;
 
+    @JsonProperty
 	private Long transientId;
 
-	private String url;
-	
+    @JsonProperty
+	private String relativePath;
+
+    @JsonProperty
 	private final Map<String, String> meta;
-	
+
+    @JsonProperty
 	private String contentType;
 
+    @JsonProperty
 	private String sha1;
 
+    @JsonProperty
+    protected String downloadUrl;
 
+
+    public String getDownloadUrl() {
+        return downloadUrl;
+    }
+
+    public UserFile setDownloadUrl(String downloadUrl) {
+        this.downloadUrl = downloadUrl;
+        return this;
+    }
 
 	public UserFile() {
 		super();
@@ -42,19 +59,7 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
         this.meta = (new ImmutableMap.Builder<String, String>()).build();
 	}
 
-//
-//	public UserFile(Path filepath, String fldname) {
-//		this(filepath, fldname, null);
-//	}
 
-//	public UserFile(Path filepath, String fldname, Map<String, String> meta) {
-//		super();
-//		this.filepath = filepath;
-//		this.url = fldname;
-//		this.meta = meta;
-//	}
-
-    @JsonProperty
     public Long getTransientId() {
         return transientId;
     }
@@ -64,10 +69,8 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
         return this;
     }
 
-    @JsonProperty
 	public String getSha1() { return this.sha1; }
 
-	@JsonProperty
 	public String getContentType() {
 		return contentType;
 	}
@@ -77,7 +80,6 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 		return this;
 	}
 
-	@JsonProperty
 	public Path getFilepath() { return filepath; }
 
 	public UserFile setFilepath(Path filepath) {
@@ -86,17 +88,15 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
         return this;
     }
 
-	@JsonProperty
-	public String getUrl() {
-		return url;
+	public String getRelativePath() {
+		return this.relativePath;
 	}
 
-	public UserFile setUrl(String name) {
-	    this.url = name;
+	public UserFile setRelativePath(String path) {
+	    this.relativePath = path;
         return this;
 	}
 
-	@JsonProperty
 	public Map<String, String> getMeta() {
 		return meta;
 	}

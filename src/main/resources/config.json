@@ -10,6 +10,11 @@
   "redeliveryDelay": 3000,
   "poolSize": 5,
   "maxPoolSize": 10,
+  "neo4jConf": {
+    "urlString": "bolt://localhost:7687",
+    "username": "neo4j",
+    "password": "reggae"
+  },
   "remoteStorageConf": {
     "bucket": {
       "bucketName": "b2public",

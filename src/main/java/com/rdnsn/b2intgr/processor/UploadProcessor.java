@@ -91,7 +91,8 @@ public class UploadProcessor extends BaseProcessor {
 			postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
 
 
-			String BZ_FILE_NAME = userFile.getFilepath().subpath(rootLen , userFile.getFilepath().getNameCount()).toString();
+//			String BZ_FILE_NAME = userFile.getFilepath().subpath(rootLen , userFile.getFilepath().getNameCount()).toString();
+			String BZ_FILE_NAME = userFile.getRelativePath();
 			log.info("\"Upload\":{ \"{}\": \"{}\"}", Constants.X_BZ_FILE_NAME, BZ_FILE_NAME);
 
 			postMessage.setHeader(Constants.X_BZ_FILE_NAME, BZ_FILE_NAME);
@@ -111,27 +112,27 @@ public class UploadProcessor extends BaseProcessor {
 		producer.stop();
 		final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
-		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getUrl());
+		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getRelativePath());
 
 		if (HttpStatus.SC_OK == code) {
 			final String downloadUrl =  String.format("%s/file/%s/%s",
 					remoteAuth.getDownloadUrl(),
                     serviceConfig.getRemoteStorageConf().getBucketName(),
-                    userFile.getFilepath().subpath(rootLen, userFile.getFilepath().getNameCount()).toString());
+                    userFile.getRelativePath());
 			
 			log.info("Completed: '{}'", downloadUrl);
 
 			try {
 				UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
-
-				exchange.getOut().copyFromWithNewBody(responseOut, ImmutableList.of(BeanUtils.describe(uploadResponse)));
+                uploadResponse.setDownloadUrl(downloadUrl);
+				exchange.getOut().copyFromWithNewBody(responseOut, uploadResponse);
 				exchange.getOut().setHeader(Constants.DOWNLOAD_URL, downloadUrl);
 			} catch (Exception e) {
 				throw new UploadException(e);
 			}
 		}
 		else {
-			throw new UploadException("Response code fail (" + code + ") File '" + userFile.getUrl() +"' not uploaded" );
+			throw new UploadException("Response code fail (" + code + ") File '" + userFile.getRelativePath() +"' not uploaded" );
 		}
 	}
 

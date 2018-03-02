@@ -3,11 +3,10 @@ package com.rdnsn.b2intgr;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
@@ -16,6 +15,7 @@ import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.camel.util.jndi.JndiContext;
 import org.apache.commons.beanutils.BeanUtils;
+import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.lang.StringUtils;
 
 import com.fasterxml.jackson.core.JsonParseException;
@@ -92,19 +92,44 @@ public class MainApp {
 
     }
 
+    private List<String> crawl(Map<String, Object> map) {
+        List nkeys = new LinkedList();
+        map.entrySet().forEach( entry -> {
+            if ( entry.getValue() != null && entry.getValue() instanceof Map ) {
+                nkeys.addAll(
+                        crawl((Map<String, Object>)entry.getValue())
+                                .stream().map( innerKey -> entry.getKey() + '.' + innerKey).collect(Collectors.toList()));
+            }
+            else {
+                nkeys.add(entry.getKey());
+            }
+        });
+        return nkeys;
+    }
+
     private void doEnvironmentOverrides(CloudFSConfiguration confObject, String confFile) throws IOException {
 
         Map<String, Object> map = objectMapper.readValue(confFile, HashMap.class);
-
-        map.keySet().forEach( k -> {
+        List<String> properties = crawl(map);
+        System.err.println("properties: " + properties);
+        properties.forEach( propName -> {
             String ev = null;
-            if ( (ev = System.getenv(ENV_PREFIX + k)) != null) {
+            System.err.println("ENV_PREFIX + propName: " + ENV_PREFIX + propName);
+
+            if ( (ev = System.getenv(ENV_PREFIX + propName )) != null) {
                 try {
-                    BeanUtils.setProperty(confObject, k, ev);
-                    System.err.println(String.format("Override config['%s'] with env['%s']", k , ENV_PREFIX + k));
+                    if (propName.indexOf('.') > 0) {
+                        PropertyUtils.setNestedProperty(confObject, propName, ev);
+                    }
+                    else {
+                        BeanUtils.setProperty(confObject, propName, ev);
+                    }
+                    System.err.format("Override config['%s'] with env['%s']", propName , ENV_PREFIX + propName);
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();
                 } catch (InvocationTargetException e) {
+                    e.printStackTrace();
+                } catch (NoSuchMethodException e) {
                     e.printStackTrace();
                 }
             }

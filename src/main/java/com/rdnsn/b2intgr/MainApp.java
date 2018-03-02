@@ -110,11 +110,9 @@ public class MainApp {
     private void doEnvironmentOverrides(CloudFSConfiguration confObject, String confFile) throws IOException {
 
         Map<String, Object> map = objectMapper.readValue(confFile, HashMap.class);
-        List<String> properties = crawl(map);
-        System.err.println("properties: " + properties);
-        properties.forEach( propName -> {
+
+        crawl(map).forEach( propName -> {
             String ev = null;
-            System.err.println("ENV_PREFIX + propName: " + ENV_PREFIX + propName);
 
             if ( (ev = System.getenv(ENV_PREFIX + propName )) != null) {
                 try {
@@ -124,7 +122,7 @@ public class MainApp {
                     else {
                         BeanUtils.setProperty(confObject, propName, ev);
                     }
-                    System.err.format("Override config['%s'] with env['%s']", propName , ENV_PREFIX + propName);
+                    System.err.format("Override config['%s'] with env['%s']%n", propName , ENV_PREFIX + propName);
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();
                 } catch (InvocationTargetException e) {

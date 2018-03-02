@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
@@ -17,7 +18,8 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UserFile implements Comparable<UserFile>, java.io.Serializable {
-	
+
+    @JsonIgnore
 	private Path filepath;
 
     @JsonProperty
@@ -25,6 +27,9 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 
     @JsonProperty
 	private String relativePath;
+
+    @JsonProperty
+	private String author;
 
     @JsonProperty
 	private final Map<String, String> meta;
@@ -39,15 +44,6 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
     protected String downloadUrl;
 
 
-    public String getDownloadUrl() {
-        return downloadUrl;
-    }
-
-    public UserFile setDownloadUrl(String downloadUrl) {
-        this.downloadUrl = downloadUrl;
-        return this;
-    }
-
 	public UserFile() {
 		super();
         this.meta = (new ImmutableMap.Builder<String, String>()).build();
@@ -59,6 +55,23 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
         this.meta = (new ImmutableMap.Builder<String, String>()).build();
 	}
 
+    public String getAuthor() {
+        return author;
+    }
+
+    public UserFile setAuthor(String author) {
+        this.author = author;
+        return this;
+    }
+
+    public String getDownloadUrl() {
+        return downloadUrl;
+    }
+
+    public UserFile setDownloadUrl(String downloadUrl) {
+        this.downloadUrl = downloadUrl;
+        return this;
+    }
 
     public Long getTransientId() {
         return transientId;
@@ -68,6 +81,10 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
         this.transientId = transientId;
         return this;
     }
+
+    public long getSize() {
+    	return this.filepath.toFile().length();
+	}
 
 	public String getSha1() { return this.sha1; }
 
@@ -80,6 +97,7 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 		return this;
 	}
 
+    @JsonIgnore
 	public Path getFilepath() { return filepath; }
 
 	public UserFile setFilepath(Path filepath) {

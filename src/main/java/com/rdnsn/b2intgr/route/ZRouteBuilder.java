@@ -2,12 +2,14 @@ package com.rdnsn.b2intgr.route;
 
 
 import java.io.*;
+import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
@@ -369,22 +371,47 @@ public class ZRouteBuilder extends RouteBuilder {
                 .route()
                 .process(new Processor() {
                     public void process(Exchange exchange) throws Exception {
-                        Map<String, Object> hdrs = exchange.getIn().getHeaders();
-                        hdrs.entrySet().forEach(entry -> System.err.println(
-                                String.format("k: %s\nv: %s -> %s", entry.getKey(), entry.getValue(), entry.getValue().getClass())
-                        ));
-//                        HttpServletRequest request = exchange.getIn(HttpMessage.class).getRequest();
-//                        HttpServletRequest request = exchange.getIn().getBody(HttpServletRequest.class);
+
                         org.restlet.engine.adapter.HttpRequest request
                                 = exchange.getIn().getHeader("CamelRestletRequest", org.restlet.engine.adapter.HttpRequest.class);
                         String uri = request.getHttpCall().getRequestUri();
                         String ctx = serviceConfig.getContextUri() + servicePath + "/";
 
-                        String path = uri.substring(uri.indexOf(ctx) + ctx.length());
+                        String path = serviceConfig.getDocRoot() + File.separatorChar + uri.substring(uri.indexOf(ctx) + ctx.length());
+                        File file = new File(path);
 
-//                        findFileInDocRoot(path);
-//                        String id = exchange.getIn().getHeader("id", String.class);
-                        exchange.getOut().setBody(path + ";Donald Duck");
+                        if (! file.exists()) {
+
+                            String endpointHost = String.format("%s://%s:%d%s",
+                                    serviceConfig.getProtocol(),
+                                    serviceConfig.getHost(),
+                                    serviceConfig.getPort(),
+                                    uri
+                            );
+
+
+                            ProxyUrl pu = new ProxyUrl().setProxy(endpointHost);
+
+                            try (UrlMapUpdater proxyMapUpdater = makeNewUpdater()) {
+
+                                String actual = proxyMapUpdater.getActual(pu);
+                                if (actual != null) {
+                                    exchange.getOut().setHeader("Location", actual);
+                                    exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, 301);
+                                }
+                            }
+
+                        }
+                        else {
+                            file.deleteOnExit();
+                            InputStream is = new BufferedInputStream(new FileInputStream(file));
+                            String mimeType = URLConnection.guessContentTypeFromStream(is);
+                            is.close();
+
+                            exchange.getOut().setHeader(Exchange.CONTENT_TYPE, mimeType);
+                            exchange.getOut().setHeader(Exchange.CONTENT_LENGTH, file.length());
+                            exchange.getOut().setBody(file);
+                        }
                     }
                 }).endRest();
 //                .description("File reference")
@@ -435,7 +462,13 @@ public class ZRouteBuilder extends RouteBuilder {
                 String contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8)
                         .replaceAll(serviceConfig.getCustomSeparator(), "/");
 
-                String destDirBase = serviceConfig.getDocRoot() + File.separatorChar + contextId;
+                String author = contextId;
+
+                if (contextId.contains("/")) {
+                    List<String> parts = Arrays.asList(contextId.split("/"));
+                    author = parts.remove(0);
+                    contextId = String.join("/", parts);
+                }
 
                 UploadData uploadData = null;
 
@@ -445,10 +478,10 @@ public class ZRouteBuilder extends RouteBuilder {
 
                     uploadData = new UploadData();
                     String endpointHost = String.format("%s://%s:%d%s",
-                            serviceConfig.getProtocol(),
-                            serviceConfig.getHost(),
-                            serviceConfig.getPort(),
-                            serviceConfig.getContextUri()
+                        serviceConfig.getProtocol(),
+                        serviceConfig.getHost(),
+                        serviceConfig.getPort(),
+                        serviceConfig.getContextUri()
                     );
 
                     try (UrlMapUpdater proxyMapUpdater = makeNewUpdater()) {
@@ -457,41 +490,39 @@ public class ZRouteBuilder extends RouteBuilder {
                             if (item.isFormField()) {
                                 uploadData.putFormField(item.getFieldName(), item.getString());
                             } else {
-                                String pathFromUser = item.getFieldName();
-                                String partialPath = pathFromUser + File.separatorChar + item.getName();
+                                String pathFromUser =  contextId + File.separatorChar + item.getFieldName();
+                                String partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
+                                    .replaceAll("%2F", "/");
 
-                                Path destination = Paths.get(destDirBase + partialPath);
+                                Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
 
                                 Files.createDirectories(destination.getParent());
 
                                 Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
 
-//                            httpURL = endpointHost + "/file/" +
-//                                    URLEncoder.encode(destination.getFileName().toString(), Constants.UTF_8);
-
-//                            destination.subpath(rootLen, destination.getNameCount()).toString(),
-//                                    URLEncoder.encode(destination.getFileName().toString(), Constants.UTF_8)
-
-                                UserFile uf = new UserFile(destination)
+                                UserFile userFile = new UserFile(destination)
                                         .setContentType(item.getContentType())
                                         .setRelativePath(partialPath);
-                                String proxyUrl =
-                                    String.format( "%s/file/%s",
-                                        endpointHost,
-                                        cleanPath(pathFromUser + File.separatorChar + item.getName())
-                                    );
-                                uf.setDownloadUrl(proxyUrl);
-                                Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(
-                                        new ProxyUrl(proxyUrl,
-                                                uf.getSha1())
-                                                .setContentType(uf.getContentType())
-                                                .setSize(destination.toFile().length())
+
+                                String proxyUrl = String.format( "%s/file/%s",
+                                    endpointHost,
+                                    partialPath
                                 );
 
+                                userFile.setAuthor(author);
+                                userFile.setDownloadUrl(proxyUrl);
+
+                                Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(
+                                    new ProxyUrl(proxyUrl, userFile.getSha1())
+                                    .setContentType(userFile.getContentType())
+                                    .setSize(destination.toFile().length())
+                                );
+                                destination.toFile().deleteOnExit();
+
                                 log.info("update id: {}", id);
-                                uf.setTransientId(id);
+                                userFile.setTransientId(id);
                                 item.delete();
-                                uploadData.addFile(uf);
+                                uploadData.addFile(userFile);
                             }
                         }
                     } catch (Exception e) {
@@ -517,11 +548,6 @@ public class ZRouteBuilder extends RouteBuilder {
         }
         return String.join("/", parts);
     }
-
-//    public String makePartialPathFrom(String baseDirectory){
-//        int rootLen = Paths.get(baseDirectory).getNameCount();
-//        return getFilepath().subpath(rootLen, getFilepath().getNameCount()).toString());
-//    }
 
     private class ListSplitExpression implements Expression {
         @Override
@@ -598,6 +624,34 @@ public class ZRouteBuilder extends RouteBuilder {
                 return resData;
             }
         }
+
+        public String getActual(final ProxyUrl message) {
+
+            String findCypher = String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN p.actual", message.getProxy());
+
+
+            try (Session session = driver.session()) {
+                String resData = session.writeTransaction((Transaction tx) ->
+                {
+
+                    System.err.format("findCypher: %s%n", findCypher);
+
+                    StatementResult result = tx.run(findCypher);
+                    String found = null;
+                    if (result.hasNext()) {
+
+                        Record res = result.single();
+                        found = res.size() > 0 ? res.get(0).asString() : null;
+
+                        System.err.format("found: %s%n", found);
+
+                    }
+
+                    return found;
+                });
+                return resData;
+            }
+        }
     }
 
     private class PersistMapping implements Processor {
@@ -605,21 +659,16 @@ public class ZRouteBuilder extends RouteBuilder {
         @Override
         public void process(Exchange exchange) throws Exception {
             UploadFileResponse uploadResponse = exchange.getIn().getBody(UploadFileResponse.class);
-            final String downloadUrl = exchange.getIn().getHeader(Constants.DOWNLOAD_URL, String.class);
-
-            String sha1 = uploadResponse.getContentSha1();
-            String downloadUrlupl = uploadResponse.getDownloadUrl();
-
-            System.err.format("downloadUrl: %s%n downloadUrlupl: %s%n sha1: %s%n ",downloadUrl, downloadUrlupl, sha1);
-            ProxyUrl p = new ProxyUrl()
-                    .setSha1(sha1)
-                    .setActual(uploadResponse.getDownloadUrl());
-
 
             try (UrlMapUpdater proxyMapUpdater = makeNewUpdater()) {
-                Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(p);
+                Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(new ProxyUrl()
+                    // Sha1 is used as ID in Neo
+                    .setSha1(uploadResponse.getContentSha1())
+                    .setActual(uploadResponse.getDownloadUrl())
+                    .setB2Complete(true)
+                );
                 uploadResponse.setTransientId(id);
-                exchange.getOut().copyFromWithNewBody(exchange.getIn(), uploadResponse);
+//                exchange.getOut().copyFromWithNewBody(exchange.getIn(), uploadResponse);
             }
 
         }

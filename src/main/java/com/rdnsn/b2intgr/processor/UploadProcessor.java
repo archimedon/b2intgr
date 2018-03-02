@@ -61,10 +61,10 @@ public class UploadProcessor extends BaseProcessor {
 		String uri = getHttp4Proto(authUploadUrl) + ZRouteBuilder.HTTP4_PARAMS;
 
 		return objectMapper.readValue(
-			producer.send(uri, (Exchange innerExchg) -> {
-				innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-				innerExchg.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
-				innerExchg.getIn().setBody(bucketMap);
+			producer.send(uri, (Exchange exchange) -> {
+				exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+				exchange.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
+				exchange.getIn().setBody(bucketMap);
 			}).getOut().getBody(String.class),
 			GetUploadUrlResponse.class);
 	}
@@ -79,46 +79,37 @@ public class UploadProcessor extends BaseProcessor {
 		final GetUploadUrlResponse uploadAuth =
 				doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
 		
-		final String authdUploadUrl =
-				getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS;
-		
-		final File file = userFile.getFilepath().toFile();
-        final String sha1 = UploadProcessor.sha1(file);
-        int rootLen = Paths.get(serviceConfig.getDocRoot()).getNameCount();
 
-		final Message responseOut = producer.send(authdUploadUrl, innerExchg -> {
+		final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS,innerExchg -> {
+
 			final Message postMessage = innerExchg.getIn();
 			postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
 
-
-//			String BZ_FILE_NAME = userFile.getFilepath().subpath(rootLen , userFile.getFilepath().getNameCount()).toString();
-			String BZ_FILE_NAME = userFile.getRelativePath();
-			log.info("\"Upload\":{ \"{}\": \"{}\"}", Constants.X_BZ_FILE_NAME, BZ_FILE_NAME);
-
-			postMessage.setHeader(Constants.X_BZ_FILE_NAME, BZ_FILE_NAME);
+			postMessage.setHeader(Constants.X_BZ_FILE_NAME, userFile.getRelativePath());
 			
 //			if (log.isDebugEnabled()) {
 //				corruptSomeHashes(sha1, exchange, file);
 //			}
-			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, sha1);
+			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, userFile.getSha1());
 
-			postMessage.setHeader(Exchange.CONTENT_LENGTH, file.length() + "");
+			postMessage.setHeader(Exchange.CONTENT_LENGTH, Long.toString(userFile.getSize()));
 			postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
 			postMessage.setHeader(Constants.AUTHORIZATION, uploadAuth.getAuthorizationToken());
-			postMessage.setHeader(Constants.X_BZ_INFO_AUTHOR, "unknown");
-			postMessage.setBody(file);
+			postMessage.setHeader(Constants.X_BZ_INFO_AUTHOR, userFile.getAuthor());
+			postMessage.setBody(userFile.getFilepath().toFile());
 		}).getOut();
 
 		producer.stop();
 		final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
-		log.info("HTTP_RESPONSE_CODE: '{}' XBzFileName: '{}'", code, userFile.getRelativePath());
+		log.info("HTTP_RESPONSE_CODE:{ '{}' XBzFileName: '{}'}", code, userFile.getRelativePath());
 
 		if (HttpStatus.SC_OK == code) {
+            // TODO: 3/2/18 Fix DownloadURL setting. Would prefer a single point.
 			final String downloadUrl =  String.format("%s/file/%s/%s",
-					remoteAuth.getDownloadUrl(),
-                    serviceConfig.getRemoteStorageConf().getBucketName(),
-                    userFile.getRelativePath());
+                remoteAuth.getDownloadUrl(),
+                serviceConfig.getRemoteStorageConf().getBucketName(),
+                userFile.getRelativePath());
 			
 			log.info("Completed: '{}'", downloadUrl);
 

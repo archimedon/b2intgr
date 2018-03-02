@@ -466,8 +466,8 @@ public class ZRouteBuilder extends RouteBuilder {
 
                 if (contextId.contains("/")) {
                     List<String> parts = Arrays.asList(contextId.split("/"));
-                    author = parts.remove(0);
-                    contextId = String.join("/", parts);
+                    author = parts.get(0);
+                    contextId = String.join("/", parts.subList(1,parts.size() ));
                 }
 
                 UploadData uploadData = null;

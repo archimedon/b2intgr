@@ -8,6 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import org.apache.activemq.camel.component.ActiveMQComponent;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
@@ -60,6 +61,10 @@ public class MainApp {
         this.objectMapper = new ObjectMapper();
         this.serviceConfig = getSettings();
 
+        if (! new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper).isAlive()) {
+            System.err.println("No connection to Neo4J");
+            System.exit(1);
+        }
         File f = new File(serviceConfig.getDocRoot());
         if (!f.exists()) {
             System.err.println((f.mkdirs() ? "Made DocRoot directory " : "Make DocRoot directory failed: ") + f.getPath());

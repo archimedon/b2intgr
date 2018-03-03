@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
+import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.model.ProxyUrl;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
@@ -392,7 +393,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
                             ProxyUrl pu = new ProxyUrl().setProxy(endpointHost);
 
-                            try (UrlMapUpdater proxyMapUpdater = makeNewUpdater()) {
+                            try (ProxyUrlDAO proxyMapUpdater = makeNewUpdater()) {
 
                                 String actual = proxyMapUpdater.getActual(pu);
                                 if (actual != null) {
@@ -484,7 +485,7 @@ public class ZRouteBuilder extends RouteBuilder {
                         serviceConfig.getContextUri()
                     );
 
-                    try (UrlMapUpdater proxyMapUpdater = makeNewUpdater()) {
+                    try (ProxyUrlDAO proxyMapUpdater = makeNewUpdater()) {
 
                         for (FileItem item : items) {
                             if (item.isFormField()) {
@@ -536,8 +537,8 @@ public class ZRouteBuilder extends RouteBuilder {
         }
     }
 
-    private UrlMapUpdater makeNewUpdater() {
-        return new UrlMapUpdater(serviceConfig.getNeo4jConf().getUrlString(), serviceConfig.getNeo4jConf().getUsername(), serviceConfig.getNeo4jConf().getPassword());
+    private ProxyUrlDAO makeNewUpdater() {
+        return new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper);
     }
 
     private String cleanPath(String partialFilePath) throws UnsupportedEncodingException {
@@ -558,101 +559,6 @@ public class ZRouteBuilder extends RouteBuilder {
         }
     }
 
-    private class UrlMapUpdater implements AutoCloseable {
-        private final Driver driver;
-
-        public UrlMapUpdater(String uri, String user, String password) {
-            driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
-        }
-
-        @Override
-        public void close() {
-            driver.close();
-        }
-
-
-        public Object saveOrUpdateMapping(final ProxyUrl message) {
-
-            String findCypher = message.getSha1() == null
-                    ? String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN id(p)", message.getProxy())
-                    : String.format("MATCH (p:ProxyUrl) WHERE p.sha1 = \"%s\" RETURN id(p)", message.getSha1());
-
-            try (Session session = driver.session()) {
-                Object resData = session.writeTransaction((Transaction tx) ->
-                {
-                    Long idResult = null;
-
-                    System.err.format("findCypher: %s%n", findCypher);
-
-                    StatementResult result = tx.run(findCypher);
-                    if (result.hasNext()) {
-
-                        Record res = result.single();
-                        idResult = res.size() > 0 ? res.get(0).asLong() : null;
-
-                        System.err.format("idResult: %s%n", idResult);
-                        try {
-
-                            // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
-                            Map<String, Object> valMap = objectMapper.readValue(message.toString(), HashMap.class);
-
-                            String updateCypher = String.format("MATCH (p:ProxyUrl) WHERE id(p) = %d", idResult) +
-                                    valMap.entrySet().stream()
-                                            .filter(ent -> ent.getValue() != null)
-                                            .map(ent -> String.format(" SET p.%s = $%s", ent.getKey(), ent.getKey()))
-                                            .collect(Collectors.joining()) +
-                                    " RETURN id(p)";
-
-                            System.err.format("updateCypher: %s%n", updateCypher);
-
-                            result = tx.run(
-                                    updateCypher,
-                                    // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
-                                    value(valMap)
-                            );
-                            idResult = result.single().get(0).asLong();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                    } else {
-                        String createCypher = String.format("CREATE (p:ProxyUrl %s) RETURN id(p)", message.toCypherJson());
-                        System.err.format("createCypher: %s%n", createCypher);
-                        idResult = tx.run(createCypher).single().get(0).asLong();
-                    }
-                    return idResult;
-                });
-                return resData;
-            }
-        }
-
-        public String getActual(final ProxyUrl message) {
-
-            String findCypher = String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN p.actual", message.getProxy());
-
-
-            try (Session session = driver.session()) {
-                String resData = session.writeTransaction((Transaction tx) ->
-                {
-
-                    System.err.format("findCypher: %s%n", findCypher);
-
-                    StatementResult result = tx.run(findCypher);
-                    String found = null;
-                    if (result.hasNext()) {
-
-                        Record res = result.single();
-                        found = res.size() > 0 ? res.get(0).asString() : null;
-
-                        System.err.format("found: %s%n", found);
-
-                    }
-
-                    return found;
-                });
-                return resData;
-            }
-        }
-    }
 
     private class PersistMapping implements Processor {
 
@@ -660,7 +566,7 @@ public class ZRouteBuilder extends RouteBuilder {
         public void process(Exchange exchange) throws Exception {
             UploadFileResponse uploadResponse = exchange.getIn().getBody(UploadFileResponse.class);
 
-            try (UrlMapUpdater proxyMapUpdater = makeNewUpdater()) {
+            try (ProxyUrlDAO proxyMapUpdater = makeNewUpdater()) {
                 Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(new ProxyUrl()
                     // Sha1 is used as ID in Neo
                     .setSha1(uploadResponse.getContentSha1())

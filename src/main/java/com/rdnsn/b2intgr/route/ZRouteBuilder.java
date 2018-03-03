@@ -10,13 +10,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
@@ -36,7 +33,6 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.http.HttpStatus;
-import org.neo4j.driver.v1.*;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
@@ -78,6 +74,7 @@ public class ZRouteBuilder extends RouteBuilder {
     private final String ppath_list_buckets = "/b2api/v1/b2_list_buckets" + HTTP4_PARAMS;
     private String ppath_list_file_names = "/b2api/v1/b2_list_file_names";
     private String servicePath = "/file";
+    private ProxyUrlDAO proxyUrlDAO = null;
 
     // // TODO: 2/13/18 url-encode the downloadURL
     public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) {
@@ -393,7 +390,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
                             ProxyUrl pu = new ProxyUrl().setProxy(endpointHost);
 
-                            try (ProxyUrlDAO proxyMapUpdater = makeNewUpdater()) {
+                            try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
 
                                 String actual = proxyMapUpdater.getActual(pu);
                                 if (actual != null) {
@@ -485,7 +482,7 @@ public class ZRouteBuilder extends RouteBuilder {
                         serviceConfig.getContextUri()
                     );
 
-                    try (ProxyUrlDAO proxyMapUpdater = makeNewUpdater()) {
+                    try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
 
                         for (FileItem item : items) {
                             if (item.isFormField()) {
@@ -537,7 +534,7 @@ public class ZRouteBuilder extends RouteBuilder {
         }
     }
 
-    private ProxyUrlDAO makeNewUpdater() {
+    private ProxyUrlDAO getProxyUrlDao() {
         return new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper);
     }
 
@@ -566,7 +563,7 @@ public class ZRouteBuilder extends RouteBuilder {
         public void process(Exchange exchange) throws Exception {
             UploadFileResponse uploadResponse = exchange.getIn().getBody(UploadFileResponse.class);
 
-            try (ProxyUrlDAO proxyMapUpdater = makeNewUpdater()) {
+            try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
                 Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(new ProxyUrl()
                     // Sha1 is used as ID in Neo
                     .setSha1(uploadResponse.getContentSha1())

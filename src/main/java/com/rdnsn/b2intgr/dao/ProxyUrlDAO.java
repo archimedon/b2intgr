@@ -13,30 +13,25 @@ import java.util.stream.Collectors;
 import static org.neo4j.driver.v1.Values.value;
 
 public class ProxyUrlDAO implements AutoCloseable {
-    private final Driver driver;
+    private Driver driver;
     private final Neo4JConfiguration conf;
-    private final String uri;
-    private final String user;
-    private final String password;
     private final ObjectMapper objectMapper;
 
     public ProxyUrlDAO(Neo4JConfiguration conf, ObjectMapper objectMapper) {
         this.conf = conf;
         this.objectMapper = objectMapper;
-        this.uri = conf.getUrlString();
-        this.user = conf.getUsername();
-        this.password = conf.getPassword();
-        driver = GraphDatabase.driver(uri, AuthTokens.basic(user, password));
+        driver = GraphDatabase.driver(conf.getUrlString(), AuthTokens.basic(conf.getUsername(), conf.getPassword()));
     }
 
     @Override
     public void close() {
         driver.close();
     }
+
     public boolean isAlive() {
         boolean stat = false;
         try {
-            Session session = driver.session();
+            Session session = getSession();
 //            StatementResult re = session.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
 //            stat = ( re.hasNext() ) ? re.single().get(0).asBoolean(): false ;
             stat = session.writeTransaction((Transaction tx) -> {
@@ -44,12 +39,15 @@ public class ProxyUrlDAO implements AutoCloseable {
                 return ( result.hasNext() ) ? result.single().get(0).asBoolean() : false;
             });
 
-            session.run("MATCH (b:BBIntgrTest) DELETE b;");
+//            session.run("MATCH (b:BBIntgrTest) DELETE b;");
             session.close();
         }
         catch(Exception e) {
             stat = false;
             e.printStackTrace();
+        }
+        finally {
+            close();
         }
         return stat;
     }
@@ -60,7 +58,7 @@ public class ProxyUrlDAO implements AutoCloseable {
                 ? String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN id(p)", message.getProxy())
                 : String.format("MATCH (p:ProxyUrl) WHERE p.sha1 = \"%s\" RETURN id(p)", message.getSha1());
 
-        try (Session session = driver.session()) {
+        try (Session session = getSession()) {
             Object resData = session.writeTransaction((Transaction tx) ->
             {
                 Long idResult = null;
@@ -113,7 +111,7 @@ public class ProxyUrlDAO implements AutoCloseable {
         String findCypher = String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN p.actual", message.getProxy());
 
 
-        try (Session session = driver.session()) {
+        try (Session session = getSession()) {
             String resData = session.writeTransaction((Transaction tx) ->
             {
 
@@ -134,5 +132,9 @@ public class ProxyUrlDAO implements AutoCloseable {
             });
             return resData;
         }
+    }
+
+    synchronized private Session getSession() {
+        return driver.session();
     }
 }

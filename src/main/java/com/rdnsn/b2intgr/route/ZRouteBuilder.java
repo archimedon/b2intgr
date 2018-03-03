@@ -190,7 +190,7 @@ public class ZRouteBuilder extends RouteBuilder {
                 // Send to b2
                 .wireTap("direct:b2upload")
                 .end()
-                .process(new ReplyProxyUrls())
+//                .process(new ReplyProxyUrls())
                 .end();
 
         from("direct:b2upload").routeId("upload_facade")
@@ -526,7 +526,7 @@ public class ZRouteBuilder extends RouteBuilder {
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
-                    exchange.getOut().setBody(uploadData);
+                    exchange.getOut().setBody(uploadData.getFiles());
                 }
             } catch (FileUploadException | IOException e) {
                 e.printStackTrace();

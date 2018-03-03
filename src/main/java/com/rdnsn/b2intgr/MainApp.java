@@ -121,8 +121,8 @@ public class MainApp {
 
             if ( (ev = System.getenv(ENV_PREFIX + propName )) != null) {
                 try {
-                    if (propName.indexOf('.') > 0) {
-                        PropertyUtils.setNestedProperty(confObject, propName, ev);
+                    if (propName.indexOf('_') > 0) {
+                        PropertyUtils.setNestedProperty(confObject, propName.replaceAll("_", "."), ev);
                     }
                     else {
                         BeanUtils.setProperty(confObject, propName, ev);

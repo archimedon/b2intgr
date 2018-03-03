@@ -401,7 +401,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
                         }
                         else {
-                            file.deleteOnExit();
+//                            file.deleteOnExit();
                             InputStream is = new BufferedInputStream(new FileInputStream(file));
                             String mimeType = URLConnection.guessContentTypeFromStream(is);
                             is.close();
@@ -515,11 +515,11 @@ public class ZRouteBuilder extends RouteBuilder {
                                     .setContentType(userFile.getContentType())
                                     .setSize(destination.toFile().length())
                                 );
-                                destination.toFile().deleteOnExit();
+//                                destination.toFile().deleteOnExit();
 
                                 log.info("update id: {}", id);
                                 userFile.setTransientId(id);
-                                item.delete();
+//                                item.delete();
                                 uploadData.addFile(userFile);
                             }
                         }

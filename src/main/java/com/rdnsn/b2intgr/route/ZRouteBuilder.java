@@ -14,6 +14,7 @@ import java.util.List;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
@@ -74,7 +75,6 @@ public class ZRouteBuilder extends RouteBuilder {
     private final String ppath_list_buckets = "/b2api/v1/b2_list_buckets" + HTTP4_PARAMS;
     private String ppath_list_file_names = "/b2api/v1/b2_list_file_names";
     private String servicePath = "/file";
-    private ProxyUrlDAO proxyUrlDAO = null;
 
     // // TODO: 2/13/18 url-encode the downloadURL
     public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) {
@@ -190,7 +190,7 @@ public class ZRouteBuilder extends RouteBuilder {
                 // Send to b2
                 .wireTap("direct:b2upload")
                 .end()
-//                .process(new ReplyProxyUrls())
+                .process(new ReplyProxyUrls())
                 .end();
 
         from("direct:b2upload").routeId("upload_facade")
@@ -314,7 +314,7 @@ public class ZRouteBuilder extends RouteBuilder {
         public void process(Exchange exchange) throws IOException {
 
             UploadData obj = exchange.getIn().getBody(UploadData.class);
-            exchange.getOut().setBody(obj.getFiles());
+            exchange.getOut().setBody(obj.getFiles().stream().map(usrf -> usrf).collect(Collectors.toList()));
         }
     }
 
@@ -401,7 +401,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
                         }
                         else {
-//                            file.deleteOnExit();
+                            file.deleteOnExit();
                             InputStream is = new BufferedInputStream(new FileInputStream(file));
                             String mimeType = URLConnection.guessContentTypeFromStream(is);
                             is.close();
@@ -482,7 +482,6 @@ public class ZRouteBuilder extends RouteBuilder {
                         serviceConfig.getContextUri()
                     );
 
-                    try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
 
                         for (FileItem item : items) {
                             if (item.isFormField()) {
@@ -497,36 +496,40 @@ public class ZRouteBuilder extends RouteBuilder {
                                 Files.createDirectories(destination.getParent());
 
                                 Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-
-                                UserFile userFile = new UserFile(destination)
+                                System.err.format("desttpString: %s%n" , destination.toString());
+                                UserFile userFile = new UserFile(destination.toString())
                                         .setContentType(item.getContentType())
                                         .setRelativePath(partialPath);
 
-                                String proxyUrl = String.format( "%s/file/%s",
-                                    endpointHost,
-                                    partialPath
-                                );
 
                                 userFile.setAuthor(author);
-                                userFile.setDownloadUrl(proxyUrl);
+                                userFile.setDownloadUrl(String.format( "%s/file/%s",
+                                        endpointHost,
+                                        partialPath
+                                ));
 
-                                Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(
-                                    new ProxyUrl(proxyUrl, userFile.getSha1())
-                                    .setContentType(userFile.getContentType())
-                                    .setSize(destination.toFile().length())
-                                );
-//                                destination.toFile().deleteOnExit();
 
-                                log.info("update id: {}", id);
-                                userFile.setTransientId(id);
-//                                item.delete();
+                                item.delete();
                                 uploadData.addFile(userFile);
                             }
                         }
+                    try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
+//                        create (a:Ohoh { name: "a" }),(c:Ohoh {name:"c"})
+                        uploadData.getFiles().forEach( modifiedUserFile -> {
+                            modifiedUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
+                                    new ProxyUrl(String.format( "%s/file/%s",
+                                            endpointHost,
+                                            modifiedUserFile.getRelativePath()
+                                    ), modifiedUserFile.getSha1())
+                                            .setContentType(modifiedUserFile.getContentType())
+                                            .setSize(modifiedUserFile.getSize())
+                            ));
+                        });
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
-                    exchange.getOut().setBody(uploadData.getFiles());
+
+                    exchange.getOut().setBody(uploadData);
                 }
             } catch (FileUploadException | IOException e) {
                 e.printStackTrace();

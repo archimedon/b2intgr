@@ -17,7 +17,6 @@ import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.http4.HttpMethods;
-import org.apache.commons.beanutils.BeanUtils;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +25,6 @@ import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.rdnsn.b2intgr.CloudFSConfiguration;
 import com.rdnsn.b2intgr.Constants;
@@ -78,7 +76,9 @@ public class UploadProcessor extends BaseProcessor {
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
 		final GetUploadUrlResponse uploadAuth =
 				doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
-		
+
+        final File file = Paths.get(userFile.getFilepath()).toFile();
+        final String sha1 = sha1(file);
 
 		final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS,innerExchg -> {
 
@@ -90,13 +90,13 @@ public class UploadProcessor extends BaseProcessor {
 //			if (log.isDebugEnabled()) {
 //				corruptSomeHashes(sha1, exchange, file);
 //			}
-			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, userFile.getSha1());
+			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, sha1);
 
 			postMessage.setHeader(Exchange.CONTENT_LENGTH, Long.toString(userFile.getSize()));
 			postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
 			postMessage.setHeader(Constants.AUTHORIZATION, uploadAuth.getAuthorizationToken());
 			postMessage.setHeader(Constants.X_BZ_INFO_AUTHOR, userFile.getAuthor());
-			postMessage.setBody(userFile.getFilepath().toFile());
+			postMessage.setBody(file);
 		}).getOut();
 
 		producer.stop();

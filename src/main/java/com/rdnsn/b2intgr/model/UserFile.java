@@ -20,7 +20,7 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 
     @JsonIgnore
-	private Path filepath;
+	private String filepath;
 
     @JsonProperty
 	private Long transientId;
@@ -49,7 +49,7 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
         this.meta = (new ImmutableMap.Builder<String, String>()).build();
 	}
 	
-	public UserFile(Path filepath) {
+	public UserFile(String filepath) {
         super();
         this.setFilepath(filepath);
         this.meta = (new ImmutableMap.Builder<String, String>()).build();
@@ -83,12 +83,17 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
     }
 
     public long getSize() {
-    	return this.filepath.toFile().length();
+    	return Paths.get(filepath).toFile().length();
 	}
 
 	public String getSha1() { return this.sha1; }
 
-	public String getContentType() {
+    public UserFile setSha1(String sha1) {
+        this.sha1 = sha1;
+        return this;
+    }
+
+    public String getContentType() {
 		return contentType;
 	}
 
@@ -97,16 +102,19 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 		return this;
 	}
 
-    @JsonIgnore
-	public Path getFilepath() { return filepath; }
 
-	public UserFile setFilepath(Path filepath) {
-		this.filepath = filepath;
-        this.sha1 = UploadProcessor.sha1(filepath.toFile());
+    public UserFile setFilepath(String filepath) {
+        System.err.format("Setting filepath: %s%n", filepath);
+        this.filepath = filepath;
+//        this.setSha1(UploadProcessor.sha1(Paths.get(filepath).toFile()));
         return this;
     }
 
-	public String getRelativePath() {
+    public String getFilepath() {
+        return this.filepath;
+    }
+
+    public String getRelativePath() {
 		return this.relativePath;
 	}
 

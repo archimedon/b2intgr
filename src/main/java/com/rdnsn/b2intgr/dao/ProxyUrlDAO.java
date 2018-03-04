@@ -32,14 +32,14 @@ public class ProxyUrlDAO implements AutoCloseable {
         boolean stat = false;
         try {
             Session session = getSession();
-//            StatementResult re = session.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
-//            stat = ( re.hasNext() ) ? re.single().get(0).asBoolean(): false ;
-            stat = session.writeTransaction((Transaction tx) -> {
-                StatementResult result = tx.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
-                return ( result.hasNext() ) ? result.single().get(0).asBoolean() : false;
-            });
+            StatementResult re = session.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
+            stat = ( re.hasNext() ) ? re.single().get(0).asBoolean(): false ;
+//            stat = session.writeTransaction((Transaction tx) -> {
+//                StatementResult result = tx.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
+//                return ( result.hasNext() ) ? result.single().get(0).asBoolean() : false;
+//            });
 
-//            session.run("MATCH (b:BBIntgrTest) DELETE b;");
+            session.run("MATCH (b:BBIntgrTest) DELETE b;");
             session.close();
         }
         catch(Exception e) {

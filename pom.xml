@@ -125,6 +125,7 @@
             <groupId>org.neo4j.driver</groupId>
             <artifactId>neo4j-java-driver</artifactId>
             <version>1.5.0</version>
+			<scope>compile</scope>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache-extras.camel-extra/camel-spring-neo4j -->
@@ -147,10 +148,10 @@
         <!--</dependency>-->
 
 <!-- temporary. Only for interim demo -->
-<dependency>
-    <groupId>org.apache.camel</groupId>
-    <artifactId>camel-csv</artifactId>
-</dependency>
+<!--<dependency>-->
+    <!--<groupId>org.apache.camel</groupId>-->
+    <!--<artifactId>camel-csv</artifactId>-->
+<!--</dependency>-->
 
 <!-- https://mvnrepository.com/artifact/commons-beanutils/commons-beanutils -->
 <dependency>
@@ -232,18 +233,22 @@
 			<version>1.3.3</version>
 		</dependency>
 
+		<!-- https://mvnrepository.com/artifact/org.restlet.jee/org.restlet.ext.fileupload -->
+		<!-- https://mvnrepository.com/artifact/org.restlet.jee/org.restlet.ext.fileupload -->
 		<dependency>
-		    <groupId>org.restlet</groupId>
-		    <artifactId>org.restlet.ext.fileupload</artifactId>
-		    <version>2.0-M3</version>
-            <!--<version>3.0-M1</version>-->
+			<groupId>org.restlet.jee</groupId>
+			<artifactId>org.restlet.ext.fileupload</artifactId>
+			<version>3.0-M1</version>
+			<scope>compile</scope>
 		</dependency>
-        <!-- https://mvnrepository.com/artifact/org.restlet.jee/org.restlet.ext.jackson -->
-        <dependency>
-            <groupId>org.restlet.jee</groupId>
-            <artifactId>org.restlet.ext.jackson</artifactId>
-            <version>3.0-M1</version>
-        </dependency>
+
+		<dependency>
+			<groupId>org.restlet.jee</groupId>
+			<artifactId>org.restlet.ext.jackson</artifactId>
+			<version>3.0-M1</version>
+			<scope>compile</scope>
+		</dependency>
+
 
 		<dependency>
 			<groupId>org.apache.camel</groupId>
@@ -406,6 +411,19 @@
                               <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                   <mainClass>com.rdnsn.b2intgr.MainApp</mainClass>
                               </transformer>
+							  <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+							  <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+								  <resource>META-INF/spring.handlers</resource>
+							  </transformer>
+							  <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+								  <resource>META-INF/spring.schemas</resource>
+							  </transformer>
+							  <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+								  <resource>META-INF/spring.tooling</resource>
+							  </transformer>
+							  <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+								  <resource>META-INF/cxf/bus-extensions.txt</resource>
+							  </transformer>
                           </transformers>
                           <filters>
 							  <!-- Required in order to SKIP the checking of signed jar-files -->

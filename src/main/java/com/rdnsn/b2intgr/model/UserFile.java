@@ -1,5 +1,6 @@
 package com.rdnsn.b2intgr.model;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
@@ -49,10 +50,22 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
         this.meta = (new ImmutableMap.Builder<String, String>()).build();
 	}
 	
+	public UserFile(File file) {
+        this();
+        this.setFilepath(file.getAbsolutePath());
+        this.sha1 = UploadProcessor.sha1(file);
+	}
+
+	public UserFile(Path filePath) {
+        this();
+        this.setFilepath(filePath.toString());
+        this.sha1 = UploadProcessor.sha1(filePath.toFile());
+	}
+
 	public UserFile(String filepath) {
-        super();
+        this();
         this.setFilepath(filepath);
-        this.meta = (new ImmutableMap.Builder<String, String>()).build();
+        this.sha1 = UploadProcessor.sha1(new File(filepath));
 	}
 
     public String getAuthor() {

@@ -117,7 +117,7 @@ public class UploadProcessor extends BaseProcessor {
 				UploadFileResponse uploadResponse = objectMapper.readValue(responseOut.getBody(String.class), UploadFileResponse.class);
                 uploadResponse.setDownloadUrl(downloadUrl);
 				exchange.getOut().copyFromWithNewBody(responseOut, uploadResponse);
-//				exchange.getOut().setHeader(Constants.DOWNLOAD_URL, downloadUrl);
+				exchange.getOut().setHeader(Constants.USER_FILE, userFile);
 			} catch (Exception e) {
 				throw new UploadException(e);
 			}

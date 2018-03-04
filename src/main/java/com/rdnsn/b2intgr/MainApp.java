@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdnsn.b2intgr.api.AuthResponse;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
+import org.neo4j.driver.v1.exceptions.ServiceUnavailableException;
 
 
 /**
@@ -61,15 +62,30 @@ public class MainApp {
         this.objectMapper = new ObjectMapper();
         this.serviceConfig = getSettings();
 
-        if (! new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper).isAlive()) {
-            System.err.println("No connection to Neo4J");
-            System.exit(1);
-        }
+
         File f = new File(serviceConfig.getDocRoot());
         if (!f.exists()) {
             System.err.println((f.mkdirs() ? "Made DocRoot directory " : "Make DocRoot directory failed: ") + f.getPath());
         } else {
             System.err.println("DocRoot directory exists: " + f.getPath());
+        }
+
+        checkDBConnection();
+    }
+
+    private void checkDBConnection() {
+
+        try {
+            if (! new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper).isAlive()) {
+                System.err.println("Unable to write to database.");
+                System.err.format("Check connection settings.%n%s%n", serviceConfig.getNeo4jConf());
+                System.exit(1);
+            }
+        }
+        catch (ServiceUnavailableException sune) {
+            sune.printStackTrace();
+            System.err.format("Unable to connect to database.%nCheck connection settings.%n%s%n", serviceConfig.getNeo4jConf());
+            System.exit(1);
         }
     }
 

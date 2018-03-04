@@ -3,6 +3,8 @@ package com.rdnsn.b2intgr;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 import javax.validation.constraints.NotNull;
 
@@ -50,5 +52,8 @@ public class Neo4JConfiguration {
     public Neo4JConfiguration setUsername(String username) {
         this.username = username;
         return this;
+    }
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
     }
 }

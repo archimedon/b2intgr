@@ -1,5 +1,6 @@
 package com.rdnsn.b2intgr.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -28,6 +29,9 @@ public class ProxyUrl {
     @JsonProperty
 	Long size;
 
+    @JsonIgnore
+	transient Long transientId;
+
 	@JsonProperty
 	boolean b2Complete = false;
 
@@ -48,6 +52,15 @@ public class ProxyUrl {
         this(sha1);
         this.proxy = proxy;
 	}
+
+    public Long getTransientId() {
+        return transientId;
+    }
+
+    public ProxyUrl setTransientId(Long transientId) {
+        this.transientId = transientId;
+        return this;
+    }
 
     public String getSha1() {
         return sha1;
@@ -115,11 +128,13 @@ public class ProxyUrl {
 //    }
 
     public String toString() {
-        return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
+        ReflectionToStringBuilder.setDefaultStyle(ToStringStyle.JSON_STYLE);
+        return ReflectionToStringBuilder.toStringExclude(this, new String[]{"transientId"});
     }
 
     public String toCypherJson() {
-        return ReflectionToStringBuilder.toString(this, new CypherJsonToStringStyle());
+        ReflectionToStringBuilder.setDefaultStyle(new CypherJsonToStringStyle());
+        return ReflectionToStringBuilder.toStringExclude(this, new String[]{"transientId"});
     }
 }
 class CypherJsonToStringStyle extends ToStringStyle {

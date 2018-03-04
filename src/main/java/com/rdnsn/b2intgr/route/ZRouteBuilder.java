@@ -207,6 +207,7 @@ public class ZRouteBuilder extends RouteBuilder {
         from("direct:b2send").routeId("atomic_upload")
                 .errorHandler(noErrorHandler())
                 .process(new UploadProcessor(serviceConfig, objectMapper))
+                .delay(1500)
                 .process(new PersistMapping())
                 .end();
 
@@ -373,6 +374,7 @@ public class ZRouteBuilder extends RouteBuilder {
                         org.restlet.engine.adapter.HttpRequest request
                                 = exchange.getIn().getHeader("CamelRestletRequest", org.restlet.engine.adapter.HttpRequest.class);
                         String uri = request.getHttpCall().getRequestUri();
+
                         String ctx = serviceConfig.getContextUri() + servicePath + "/";
 
                         String path = serviceConfig.getDocRoot() + File.separatorChar + uri.substring(uri.indexOf(ctx) + ctx.length());
@@ -497,7 +499,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
                                 Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
                                 System.err.format("desttpString: %s%n" , destination.toString());
-                                UserFile userFile = new UserFile(destination.toString())
+                                UserFile userFile = new UserFile(destination)
                                         .setContentType(item.getContentType())
                                         .setRelativePath(partialPath);
 
@@ -514,15 +516,13 @@ public class ZRouteBuilder extends RouteBuilder {
                             }
                         }
                     try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
-//                        create (a:Ohoh { name: "a" }),(c:Ohoh {name:"c"})
-                        uploadData.getFiles().forEach( modifiedUserFile -> {
-                            modifiedUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
-                                    new ProxyUrl(String.format( "%s/file/%s",
-                                            endpointHost,
-                                            modifiedUserFile.getRelativePath()
-                                    ), modifiedUserFile.getSha1())
-                                            .setContentType(modifiedUserFile.getContentType())
-                                            .setSize(modifiedUserFile.getSize())
+                        uploadData.getFiles().forEach( aUserFile -> {
+                            aUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
+                                new ProxyUrl()
+                                    .setProxy(String.format( "%s/file/%s", endpointHost, aUserFile.getRelativePath()))
+                                    .setSha1(aUserFile.getSha1())
+                                    .setContentType(aUserFile.getContentType())
+                                    .setSize(aUserFile.getSize())
                             ));
                         });
                     } catch (Exception e) {
@@ -566,8 +566,13 @@ public class ZRouteBuilder extends RouteBuilder {
         public void process(Exchange exchange) throws Exception {
             UploadFileResponse uploadResponse = exchange.getIn().getBody(UploadFileResponse.class);
 
+            UserFile uf = exchange.getIn().getHeader(Constants.USER_FILE, UserFile.class);
+            System.err.println("uploadResponse sha: " + uploadResponse.getContentSha1());
             try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
-                Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(new ProxyUrl()
+                Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(
+                        new ProxyUrl()
+                    .setProxy(uf.getDownloadUrl())
+                    .setTransientId(uf.getTransientId())
                     // Sha1 is used as ID in Neo
                     .setSha1(uploadResponse.getContentSha1())
                     .setActual(uploadResponse.getDownloadUrl())

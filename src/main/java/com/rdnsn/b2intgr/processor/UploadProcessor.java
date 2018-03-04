@@ -79,7 +79,7 @@ public class UploadProcessor extends BaseProcessor {
 
         final File file = Paths.get(userFile.getFilepath()).toFile();
         final String sha1 = sha1(file);
-
+        userFile.setSha1(sha1);
 		final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS,innerExchg -> {
 
 			final Message postMessage = innerExchg.getIn();

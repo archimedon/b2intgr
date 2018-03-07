@@ -21,52 +21,52 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 
     @JsonIgnore
-	private String filepath;
+    private String filepath;
 
     @JsonProperty
-	private Long transientId;
+    private Long transientId;
 
     @JsonProperty
-	private String relativePath;
+    private String relativePath;
 
     @JsonProperty
-	private String author;
+    private String author;
 
     @JsonProperty
-	private final Map<String, String> meta;
+    private final Map<String, String> meta;
 
     @JsonProperty
-	private String contentType;
+    private String contentType;
 
     @JsonProperty
-	private String sha1;
+    private String sha1;
 
     @JsonProperty
     protected String downloadUrl;
 
 
-	public UserFile() {
-		super();
+    public UserFile() {
+        super();
         this.meta = (new ImmutableMap.Builder<String, String>()).build();
-	}
-	
-	public UserFile(File file) {
+    }
+
+    public UserFile(File file) {
         this();
         this.setFilepath(file.getAbsolutePath());
         this.sha1 = UploadProcessor.sha1(file);
-	}
+    }
 
-	public UserFile(Path filePath) {
+    public UserFile(Path filePath) {
         this();
         this.setFilepath(filePath.toString());
         this.sha1 = UploadProcessor.sha1(filePath.toFile());
-	}
+    }
 
-	public UserFile(String filepath) {
+    public UserFile(String filepath) {
         this();
         this.setFilepath(filepath);
         this.sha1 = UploadProcessor.sha1(new File(filepath));
-	}
+    }
 
     public String getAuthor() {
         return author;
@@ -96,10 +96,12 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
     }
 
     public long getSize() {
-    	return Paths.get(filepath).toFile().length();
-	}
+        return Paths.get(filepath).toFile().length();
+    }
 
-	public String getSha1() { return this.sha1; }
+    public String getSha1() {
+        return this.sha1;
+    }
 
     public UserFile setSha1(String sha1) {
         this.sha1 = sha1;
@@ -107,19 +109,16 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
     }
 
     public String getContentType() {
-		return contentType;
-	}
+        return contentType;
+    }
 
-	public UserFile setContentType(String contentType) {
-		this.contentType = contentType;
-		return this;
-	}
-
+    public UserFile setContentType(String contentType) {
+        this.contentType = contentType;
+        return this;
+    }
 
     public UserFile setFilepath(String filepath) {
-        System.err.format("Setting filepath: %s%n", filepath);
         this.filepath = filepath;
-//        this.setSha1(UploadProcessor.sha1(Paths.get(filepath).toFile()));
         return this;
     }
 
@@ -128,25 +127,25 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
     }
 
     public String getRelativePath() {
-		return this.relativePath;
-	}
+        return this.relativePath;
+    }
 
-	public UserFile setRelativePath(String path) {
-	    this.relativePath = path;
+    public UserFile setRelativePath(String path) {
+        this.relativePath = path;
         return this;
-	}
+    }
 
-	public Map<String, String> getMeta() {
-		return meta;
-	}
+    public Map<String, String> getMeta() {
+        return meta;
+    }
 
-	@Override
-	public String toString() {
-		return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
-	}
+    @Override
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
+    }
 
-	@Override
-	public int compareTo(UserFile other) {
-		return this.filepath.compareTo(other.getFilepath());
-	}
+    @Override
+    public int compareTo(UserFile other) {
+        return this.filepath.compareTo(other.getFilepath());
+    }
 }

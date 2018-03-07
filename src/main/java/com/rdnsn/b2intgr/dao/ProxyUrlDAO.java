@@ -10,15 +10,20 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.neo4j.driver.v1.Values.parameters;
 import static org.neo4j.driver.v1.Values.value;
 
+/**
+ * TODO: 3/6/18 Need to replace the entire connection architecture... it's innefficient but does not slow any processes
+ *
+ * Represents a proxy URL.
+ *
+ */
 public class ProxyUrlDAO implements AutoCloseable {
     private Driver driver;
-    private final Neo4JConfiguration conf;
     private final ObjectMapper objectMapper;
 
     public ProxyUrlDAO(Neo4JConfiguration conf, ObjectMapper objectMapper) {
-        this.conf = conf;
         this.objectMapper = objectMapper;
         driver = GraphDatabase.driver(conf.getUrlString(), AuthTokens.basic(conf.getUsername(), conf.getPassword()));
     }
@@ -34,11 +39,6 @@ public class ProxyUrlDAO implements AutoCloseable {
             Session session = getSession();
             StatementResult re = session.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
             stat = ( re.hasNext() ) ? re.single().get(0).asBoolean(): false ;
-//            stat = session.writeTransaction((Transaction tx) -> {
-//                StatementResult result = tx.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
-//                return ( result.hasNext() ) ? result.single().get(0).asBoolean() : false;
-//            });
-
             session.run("MATCH (b:BBIntgrTest) DELETE b;");
             session.close();
         }
@@ -63,15 +63,12 @@ public class ProxyUrlDAO implements AutoCloseable {
             {
                 Long idResult = null;
 
-                System.err.format("findCypher: %s%n", findCypher);
-
                 StatementResult result = tx.run(findCypher);
                 if (result.hasNext()) {
 
                     Record res = result.single();
                     idResult = res.size() > 0 ? res.get(0).asLong() : null;
 
-                    System.err.format("idResult: %s%n", idResult);
                     try {
 
                         // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
@@ -84,7 +81,6 @@ public class ProxyUrlDAO implements AutoCloseable {
                                         .collect(Collectors.joining()) +
                                 " RETURN id(p)";
 
-                        System.err.format("updateCypher: %s%n", updateCypher);
 
                         result = tx.run(
                                 updateCypher,
@@ -97,7 +93,7 @@ public class ProxyUrlDAO implements AutoCloseable {
                     }
                 } else {
                     String createCypher = String.format("CREATE (p:ProxyUrl %s) RETURN id(p)", message.toCypherJson());
-                    System.err.format("createCypher: %s%n", createCypher);
+
                     idResult = tx.run(createCypher).single().get(0).asLong();
                 }
                 return idResult;
@@ -108,16 +104,16 @@ public class ProxyUrlDAO implements AutoCloseable {
 
     public String getActual(final ProxyUrl message) {
 
-        String findCypher = String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN p.actual", message.getProxy());
 
 
         try (Session session = getSession()) {
             String resData = session.writeTransaction((Transaction tx) ->
             {
 
-                System.err.format("findCypher: %s%n", findCypher);
 
-                StatementResult result = tx.run(findCypher);
+                StatementResult result = tx.run("MATCH (p:ProxyUrl) WHERE p.proxy = $purl RETURN p.actual",
+                        parameters("purl", message.getProxy()));
+
                 String found = null;
                 if (result.hasNext()) {
 

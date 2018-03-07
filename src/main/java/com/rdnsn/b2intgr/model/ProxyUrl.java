@@ -16,7 +16,7 @@ import java.util.Map;
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProxyUrl {
-//
+
 	@JsonProperty
 	String proxy;
 
@@ -115,17 +115,6 @@ public class ProxyUrl {
         this.contentType = contentType;
         return this;
     }
-
-//    @Override
-//    public String toString() {
-//        return String.format("{ " +
-//            "proxy: '%s', " +
-//            "actual: '%s', " +
-//            "b2Complete: %b " +
-//            "}",
-//            proxy, actual, b2Complete
-//        );
-//    }
 
     public String toString() {
         ReflectionToStringBuilder.setDefaultStyle(ToStringStyle.JSON_STYLE);

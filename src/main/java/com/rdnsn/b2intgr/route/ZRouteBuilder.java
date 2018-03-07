@@ -2,9 +2,7 @@ package com.rdnsn.b2intgr.route;
 
 
 import java.io.*;
-import java.net.URLConnection;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
+import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -17,6 +15,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
+import com.rdnsn.b2intgr.MainApp;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.model.ProxyUrl;
 import org.apache.camel.Exchange;
@@ -50,11 +49,6 @@ import com.rdnsn.b2intgr.model.UserFile;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.processor.UploadException;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
-
-import static org.neo4j.driver.v1.Values.value;
-
-
-
 
 /**
  * Base Router
@@ -100,28 +94,33 @@ public class ZRouteBuilder extends RouteBuilder {
 
             if (oldExchange == null) {
 
-                newIn.setBody(
-                        new DeleteFilesResponse().updateFile(newBody)
-                                .setMakeDownloadUrl(file -> String.format("%s/file/%s/%s",
-                                        authAgent.getAuthResponse().getDownloadUrl(),
-                                        serviceConfig.getRemoteStorageConf().getBucketName(),
-                                        file.getFileName()))
+                newIn.setBody(new DeleteFilesResponse()
+                    .updateFile(newBody)
+                    .setMakeDownloadUrl(
+                        file -> buildURLString(
+                            authAgent.getAuthResponse().getDownloadUrl(),
+                            "file",
+                                serviceConfig.getRemoteStorageConf().getBucketName(),
+                                file.getFileName()
+                        )
+                    )
                 );
-
                 return newExchange;
-            } else {
+            }
+            else {
                 oldExchange.getIn()
-                        .getBody(DeleteFilesResponse.class)
-                        .updateFile(newBody);
+                    .getBody(DeleteFilesResponse.class)
+                    .updateFile(newBody);
                 return oldExchange;
             }
         };
 
         final AggregationStrategy fileResponseAggregator = (Exchange original, Exchange resource) -> {
-            original.getOut().setBody(coerceClass(resource.getIn(), ListFilesResponse.class).setMakeDownloadUrl(file -> String.format("%s/file/%s/%s",
-                    authAgent.getAuthResponse().getDownloadUrl(),
-                    serviceConfig.getRemoteStorageConf().getBucketName(),
-                    file.getFileName())));
+
+            // TODO: 3/6/18 Get rid of BiFunc MakeDownloadURL()
+            original.getOut().setBody(coerceClass(resource.getIn(), ListFilesResponse.class).setMakeDownloadUrl(file ->
+               buildURLString(authAgent.getAuthResponse().getDownloadUrl(), "file", serviceConfig.getRemoteStorageConf().getBucketName(), file.getFileName())
+            ));
             return original;
         };
 
@@ -151,13 +150,6 @@ public class ZRouteBuilder extends RouteBuilder {
                 .redeliveryDelay(serviceConfig.getRedeliveryDelay());
 
         defineRestServer();
-
-//        from("file:/Users/ronalddennison/eclipse-workspace/b2intgr/run/data").process(new Processor() {
-//            @Override
-//            public void process(Exchange exchange) throws Exception {
-//                exchange.getIn().setBody(exchange.getIn().getHeader("CamelFileName"));
-//            }
-//        }).to("spring-neo4j:http://localhost:7474/data");
 
         // Authenticate
         from("direct:auth")
@@ -207,27 +199,27 @@ public class ZRouteBuilder extends RouteBuilder {
         from("direct:b2send").routeId("atomic_upload")
                 .errorHandler(noErrorHandler())
                 .process(new UploadProcessor(serviceConfig, objectMapper))
-                .delay(1500)
+//                .delay(500)
                 .process(new PersistMapping())
                 .end();
 
         from("direct:list_buckets")
                 .process(createPost)
                 .enrich(
-                        getHttp4Proto(authAgent.getApiUrl()) + ppath_list_buckets, (Exchange original, Exchange resource) -> {
-                            original.getIn().copyFromWithNewBody(
-                                    resource.getIn(),
-                                    resource.getIn().getBody(String.class)
-                            );
-                            return original;
-                        })
+                    getHttp4Proto(authAgent.getApiUrl()) + ppath_list_buckets, (Exchange original, Exchange resource) -> {
+                        original.getIn().copyFromWithNewBody(
+                                resource.getIn(),
+                                resource.getIn().getBody(String.class)
+                        );
+                        return original;
+                    })
                 .end();
 
         from("direct:list_files")
                 .process(createPostFileList)
                 .marshal().json(JsonLibrary.Jackson)
                 .enrich(
-                        getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_names, fileResponseAggregator)
+                    getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_names, fileResponseAggregator)
                 .end();
 
         from("direct:list_filevers")
@@ -237,45 +229,43 @@ public class ZRouteBuilder extends RouteBuilder {
                 .end();
 
         from("direct:rm_files")
-                .split(new Expression() {
-                    @Override
-                    @SuppressWarnings("unchecked")
-                    public <T> T evaluate(Exchange exchange, Class<T> type) {
-                        Message IN = exchange.getIn();
-                        DeleteFilesRequest body = exchange.getIn().getBody(DeleteFilesRequest.class);
-                        IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-                        IN.removeHeader("authResponse");
-                        return (T) body.getFiles().iterator();
-                    }
-                }, fileListResultAggregator)
-                .to("vm:delete")
-                .end();
+            .split(new Expression() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public <T> T evaluate(Exchange exchange, Class<T> type) {
+                    Message IN = exchange.getIn();
+                    DeleteFilesRequest body = exchange.getIn().getBody(DeleteFilesRequest.class);
+                    IN.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+                    IN.removeHeader("authResponse");
+                    return (T) body.getFiles().iterator();
+                }
+            }, fileListResultAggregator)
+            .to("vm:delete")
+            .end();
 
         from("vm:delete")
-                // Convert to JSON to be Post-body
-                .marshal().json(JsonLibrary.Jackson)
-
+            // Convert to JSON to be Post-body
+            .marshal().json(JsonLibrary.Jackson)
 //            .threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
-                .enrich(
-                        getHttp4Proto(authAgent.getApiUrl()) + ppath_delete_files,
-                        (Exchange original, Exchange resource) -> {
-                            ReadsError respData = null;
-                            final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-                            FileResponse postedData = coerceClass(original.getIn(), FileResponse.class);
-//                    FileResponse postedData = original.getIn().getBody(FileResponse.class);
-                            log.error("postedData: {} ,", postedData);
+            .enrich(
+                getHttp4Proto(authAgent.getApiUrl()) + ppath_delete_files,
+                (Exchange original, Exchange resource) -> {
+                    ReadsError respData = null;
+                    final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+                    FileResponse postedData = coerceClass(original.getIn(), FileResponse.class);
 
+                    log.debug("postedData: {} ,", postedData);
 
-                            if (HttpStatus.SC_OK != code) {
-                                respData = coerceClass(resource.getIn(), ErrorObject.class);
-                                log.debug("respData: " + respData);
-                                postedData.setError(respData);
-                            }
-                            original.getOut().setBody(postedData);
-                            return original;
-                        }
-                ).outputType(FileResponse.class)
-                .end();
+                    if (HttpStatus.SC_OK != code) {
+                        respData = coerceClass(resource.getIn(), ErrorObject.class);
+                        log.debug("respData: " + respData);
+                        postedData.setError(respData);
+                    }
+                    original.getOut().setBody(postedData);
+                    return original;
+                }
+            ).outputType(FileResponse.class)
+            .end();
     }
 
     private <T> T coerceClass(Message rsrcIn, Class<T> type) {
@@ -302,15 +292,13 @@ public class ZRouteBuilder extends RouteBuilder {
 
     public static String http4Suffix(String url) {
         return url + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true"
-                + "&disableStreamCache=false";
+                + "&disableStreamCache=true";
 //		+ "&transferException=false&"
 //		+ "useSystemProperties=true";
     }
 
     // TODO: 2/10/18 save URL mapping to DB or file
     class ReplyProxyUrls implements Processor {
-
-
         @Override
         public void process(Exchange exchange) throws IOException {
 
@@ -373,37 +361,35 @@ public class ZRouteBuilder extends RouteBuilder {
 
                         org.restlet.engine.adapter.HttpRequest request
                                 = exchange.getIn().getHeader("CamelRestletRequest", org.restlet.engine.adapter.HttpRequest.class);
-                        String uri = request.getHttpCall().getRequestUri();
 
+                        // /[serviceContextUri][servicePath][partialPath]
+                        // [/cloudfs/api/v1] [/file] [/top/site/images/v2/Flag_of_Jamaica.png]
+                        String uri = request.getHttpCall().getRequestUri();
                         String ctx = serviceConfig.getContextUri() + servicePath + "/";
 
-                        String path = serviceConfig.getDocRoot() + File.separatorChar + uri.substring(uri.indexOf(ctx) + ctx.length());
-                        File file = new File(path);
+                        String ppath = uri.substring(uri.indexOf(ctx) + ctx.length());
+                        File file = new File(serviceConfig.getDocRoot() + File.separatorChar + ppath);
 
                         if (! file.exists()) {
-
-                            String endpointHost = String.format("%s://%s:%d%s",
-                                    serviceConfig.getProtocol(),
-                                    serviceConfig.getHost(),
-                                    serviceConfig.getPort(),
-                                    uri
-                            );
-
-
-                            ProxyUrl pu = new ProxyUrl().setProxy(endpointHost);
+                            log.info("ppath: {} ", ppath);
 
                             try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
+                                String needleKey = new URL(MainApp.RESTAPI_HOST, uri).toExternalForm();
+                                log.debug("needleKey : {}", needleKey);
 
-                                String actual = proxyMapUpdater.getActual(pu);
+                                String actual = proxyMapUpdater.getActual(
+                                    new ProxyUrl().setProxy(ppath)
+                                );
+
+                                log.debug("Found proxy-Actual: {}", actual);
                                 if (actual != null) {
                                     exchange.getOut().setHeader("Location", actual);
                                     exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, 301);
                                 }
                             }
-
                         }
                         else {
-                            file.deleteOnExit();
+//                            file.deleteOnExit();
                             InputStream is = new BufferedInputStream(new FileInputStream(file));
                             String mimeType = URLConnection.guessContentTypeFromStream(is);
                             is.close();
@@ -470,56 +456,46 @@ public class ZRouteBuilder extends RouteBuilder {
                     contextId = String.join("/", parts.subList(1,parts.size() ));
                 }
 
-                UploadData uploadData = null;
-
                 List<FileItem> items = new RestletFileUpload(new DiskFileItemFactory()).parseRepresentation(representation);
 
                 if (!items.isEmpty()) {
 
-                    uploadData = new UploadData();
-                    String endpointHost = String.format("%s://%s:%d%s",
-                        serviceConfig.getProtocol(),
-                        serviceConfig.getHost(),
-                        serviceConfig.getPort(),
-                        serviceConfig.getContextUri()
-                    );
+                    UploadData uploadData = new UploadData();
 
+                    for (FileItem item : items) {
+                        if (item.isFormField()) {
+                            uploadData.putFormField(item.getFieldName(), item.getString());
+                        } else {
+                            String pathFromUser =  contextId + File.separatorChar + item.getFieldName();
+                            String partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
+                                .replaceAll("%2F", "/");
 
-                        for (FileItem item : items) {
-                            if (item.isFormField()) {
-                                uploadData.putFormField(item.getFieldName(), item.getString());
-                            } else {
-                                String pathFromUser =  contextId + File.separatorChar + item.getFieldName();
-                                String partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
-                                    .replaceAll("%2F", "/");
+                            log.debug("partialPath: {}", partialPath);
+                            Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
 
-                                Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
+                            Files.createDirectories(destination.getParent());
 
-                                Files.createDirectories(destination.getParent());
+                            Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
 
-                                Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-                                System.err.format("desttpString: %s%n" , destination.toString());
-                                UserFile userFile = new UserFile(destination)
-                                        .setContentType(item.getContentType())
-                                        .setRelativePath(partialPath);
+                            UserFile userFile = new UserFile(destination)
+                                .setContentType(item.getContentType())
+                                .setRelativePath(partialPath);
 
+                            userFile.setAuthor(author);
 
-                                userFile.setAuthor(author);
-                                userFile.setDownloadUrl(String.format( "%s/file/%s",
-                                        endpointHost,
-                                        partialPath
-                                ));
+                            userFile.setDownloadUrl(buildURLString(MainApp.RESTAPI_ENDPOINT, "file", partialPath));
 
+                            log.debug("userFile.getDownloadUrl: {}", userFile.getDownloadUrl());
 
-                                item.delete();
-                                uploadData.addFile(userFile);
-                            }
+                            item.delete();
+                            uploadData.addFile(userFile);
                         }
+                    }
                     try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
                         uploadData.getFiles().forEach( aUserFile -> {
                             aUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
                                 new ProxyUrl()
-                                    .setProxy(String.format( "%s/file/%s", endpointHost, aUserFile.getRelativePath()))
+                                    .setProxy(aUserFile.getRelativePath())
                                     .setSha1(aUserFile.getSha1())
                                     .setContentType(aUserFile.getContentType())
                                     .setSize(aUserFile.getSize())
@@ -537,49 +513,57 @@ public class ZRouteBuilder extends RouteBuilder {
         }
     }
 
-    private ProxyUrlDAO getProxyUrlDao() {
-        return new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper);
+    private URL buildURL(URL endpointURL, String... paths) {
+        try {
+            return new URL(endpointURL , endpointURL.getPath() + "/" + String.join("/", paths));
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e.getCause());
+        }
     }
 
-    private String cleanPath(String partialFilePath) throws UnsupportedEncodingException {
-        String[] parts = partialFilePath.split("\\/");
-        int i = 0;
-        for (String dirname : parts) {
-            parts[i++] = URLEncoder.encode(dirname, Constants.UTF_8);
+    private String buildURLString(URL endpointURL, String... paths) {
+        return buildURL(endpointURL , paths).toString();
+    }
+
+    private String buildURLString(String restapiEndpoint, String... paths) {
+        try {
+            return buildURLString(new URL(restapiEndpoint), paths);
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e.getCause());
         }
-        return String.join("/", parts);
+    }
+
+    private ProxyUrlDAO getProxyUrlDao() {
+        return new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper);
     }
 
     private class ListSplitExpression implements Expression {
         @Override
         @SuppressWarnings("unchecked")
         public <T> T evaluate(Exchange exchange, Class<T> type) {
-            return (T) exchange.getIn().getBody(UploadData.class)
-                    .getFiles().iterator();
+            return (T) exchange.getIn().getBody(UploadData.class).getFiles().iterator();
         }
     }
-
 
     private class PersistMapping implements Processor {
 
         @Override
-        public void process(Exchange exchange) throws Exception {
+        public void process(Exchange exchange) {
             UploadFileResponse uploadResponse = exchange.getIn().getBody(UploadFileResponse.class);
 
             UserFile uf = exchange.getIn().getHeader(Constants.USER_FILE, UserFile.class);
-            System.err.println("uploadResponse sha: " + uploadResponse.getContentSha1());
+
             try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
                 Long id = (Long) proxyMapUpdater.saveOrUpdateMapping(
-                        new ProxyUrl()
-                    .setProxy(uf.getDownloadUrl())
-                    .setTransientId(uf.getTransientId())
-                    // Sha1 is used as ID in Neo
-                    .setSha1(uploadResponse.getContentSha1())
-                    .setActual(uploadResponse.getDownloadUrl())
-                    .setB2Complete(true)
+                    new ProxyUrl()
+//                        .setProxy(uf.getDownloadUrl())
+                        .setProxy(uf.getRelativePath())
+                        .setTransientId(uf.getTransientId())
+                        // Sha1 is used as ID in Neo
+                        .setSha1(uploadResponse.getContentSha1())
+                        .setActual(uploadResponse.getDownloadUrl())
+                        .setB2Complete(true)
                 );
-                uploadResponse.setTransientId(id);
-//                exchange.getOut().copyFromWithNewBody(exchange.getIn(), uploadResponse);
             }
 
         }

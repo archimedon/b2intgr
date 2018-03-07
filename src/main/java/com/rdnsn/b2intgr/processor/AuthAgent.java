@@ -43,7 +43,7 @@ public class AuthAgent implements AggregationStrategy {
 		if (isExpired()) {
             getAuthorization();
             open = false;
-            log.info("Auth Token Updated: {}", authResponse);
+            log.info("Token Set");
         }
 		return authResponse;
 	}
@@ -54,10 +54,8 @@ public class AuthAgent implements AggregationStrategy {
 
             HttpResponse response = httpclient.execute(request);
             response.getEntity().writeTo(buf);
-//            String json = buf.toString(Constants.UTF_8);
             authResponse = objectMapper.readValue(buf.toString(Constants.UTF_8), AuthResponse.class);
-//            log.info("Auth String:\n{}", json);
-            log.info("AuthObject:\n{}", authResponse);
+            log.info("B2 Authorization Received");
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -66,21 +64,13 @@ public class AuthAgent implements AggregationStrategy {
 		return this.authResponse;
 	}
 
-//    private void setAuthResponse(AuthResponse auth){
-//        this.authResponse = auth;
-//    }
-
 	@Override
 	public Exchange aggregate(Exchange original, Exchange resource) {
 		if (original == null) {
-		    log.debug("IS NULL orig");
-            // the first time we only have the new exchange
             return resource;
         }
 
         final AuthResponse auth = resource.getIn().getBody(AuthResponse.class);
-		// Set on In() and Out() becu
-
         original.getIn().setHeader(Constants.AUTH_RESPONSE, auth);
         original.getIn().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
 

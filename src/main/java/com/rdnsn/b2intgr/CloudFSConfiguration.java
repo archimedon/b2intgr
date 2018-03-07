@@ -26,11 +26,11 @@ public class CloudFSConfiguration {
 
     @NotNull
     @JsonProperty
-    private String host = "localhost";
+    private String host;
 
     @NotNull
     @JsonProperty
-    private int port = 8080;
+    private int port;
 
     @NotNull
     @JsonProperty

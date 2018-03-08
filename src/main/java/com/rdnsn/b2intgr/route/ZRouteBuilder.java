@@ -18,10 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.rdnsn.b2intgr.MainApp;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.model.ProxyUrl;
-import org.apache.camel.Exchange;
-import org.apache.camel.Expression;
-import org.apache.camel.Message;
-import org.apache.camel.Processor;
+import org.apache.camel.*;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.http4.HttpMethods;
 
@@ -32,6 +29,7 @@ import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.restlet.data.MediaType;
 import org.restlet.ext.fileupload.RestletFileUpload;
@@ -49,6 +47,8 @@ import com.rdnsn.b2intgr.model.UserFile;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.processor.UploadException;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
+
+import javax.ws.rs.BadRequestException;
 
 /**
  * Base Router
@@ -149,6 +149,12 @@ public class ZRouteBuilder extends RouteBuilder {
                 .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
                 .redeliveryDelay(serviceConfig.getRedeliveryDelay());
 
+        onException(B2BadRequestException.class).process(exchange -> {
+            ErrorObject err = exchange.getOut().getBody(ErrorObject.class);
+            exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, err.getStatus());
+            exchange.getOut().setBody(err);
+        }).handled(true);
+
         defineRestServer();
 
         // Authenticate
@@ -178,12 +184,21 @@ public class ZRouteBuilder extends RouteBuilder {
 
         // Replies -> HREF to resource
         from("direct:rest.upload")
+//                .doTry()
+
                 .process(new SaveLocally())
+//                .doCatch(BadRequestException.class)
+//                .process(exchange -> exchange.getOut().copyFrom(exchange.getIn()))
+//                .doFinally()
+//                .to("mock:finally")
+//                .end()
                 // Send to b2
                 .wireTap("direct:b2upload")
                 .end()
+
                 .process(new ReplyProxyUrls())
                 .end();
+
 
         from("direct:b2upload").routeId("upload_facade")
                 .to("direct:auth")
@@ -307,6 +322,29 @@ public class ZRouteBuilder extends RouteBuilder {
         }
     }
 
+//    private Route getMailRoute() {
+//        private val subject = "OSLID - Web Mail"
+//
+//        private val username = params.get("username").get
+//        private val password = params.get("password").get
+//        private val host = params.get("host").get
+//        private val rcpt = params.get("rcpt").get
+//
+//        val opts = "?include=.*.txt&delay=1000&delete=true"
+//        private val sourceFolder =  s"""file:${params.get("sourceFolder").get}$opts"""
+//        private val destinationFolder =  s"""file:${params.get("destinationFolder").getOrElse("data/outbox")}"""
+//
+//
+//        val smtp = s"smtps://$host?username=$username&password=$password&to=$rcpt"
+//
+//        params.map(p => if (p._1.equals("password")) ("password","XXXXX") else p).foreach(p => log.info(p.toString))
+//        log.info(s"""(destinationFolder, $destinationFolder)""")
+//
+//        sourceFolder ==>
+//        setHeader("subject", constant(subject)) --> destinationFolder --> smtp
+//
+//    }
+
     private RestDefinition defineRestServer() {
         /**
          * Configure local Rest server
@@ -386,6 +424,9 @@ public class ZRouteBuilder extends RouteBuilder {
                                     exchange.getOut().setHeader("Location", actual);
                                     exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, 301);
                                 }
+                                else {
+                                    throw makeBadRequestException("Invalid URL.", exchange, "Neither file nor mapping exists." , 400);
+                                }
                             }
                         }
                         else {
@@ -437,80 +478,107 @@ public class ZRouteBuilder extends RouteBuilder {
     private class SaveLocally implements Processor {
 
         @Override
-        public void process(Exchange exchange) {
+        public void process(Exchange exchange) throws B2BadRequestException {
 
             final Message messageIn = exchange.getIn();
 
             MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
-            InputRepresentation representation = new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
 
-            try {
-                String contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8)
-                        .replaceAll(serviceConfig.getCustomSeparator(), "/");
 
-                String author = contextId;
+                try {
+                    InputRepresentation representation = new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
 
-                if (contextId.contains("/")) {
-                    List<String> parts = Arrays.asList(contextId.split("/"));
-                    author = parts.get(0);
-                    contextId = String.join("/", parts.subList(1,parts.size() ));
-                }
 
-                List<FileItem> items = new RestletFileUpload(new DiskFileItemFactory()).parseRepresentation(representation);
+                    String contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8)
+                            .replaceAll(serviceConfig.getCustomSeparator(), "/");
 
-                if (!items.isEmpty()) {
+                    String author = contextId;
 
-                    UploadData uploadData = new UploadData();
+                    if (contextId.contains("/")) {
+                        List<String> parts = Arrays.asList(contextId.split("/"));
+                        author = parts.get(0);
+                        contextId = String.join("/", parts.subList(1, parts.size()));
+                    }
 
-                    for (FileItem item : items) {
-                        if (item.isFormField()) {
-                            uploadData.putFormField(item.getFieldName(), item.getString());
-                        } else {
-                            String pathFromUser =  contextId + File.separatorChar + item.getFieldName();
-                            String partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
-                                .replaceAll("%2F", "/");
+                    List<FileItem> items = new RestletFileUpload(new DiskFileItemFactory()).parseRepresentation(representation);
 
-                            log.debug("partialPath: {}", partialPath);
-                            Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
+                    if (!items.isEmpty()) {
 
-                            Files.createDirectories(destination.getParent());
+                        UploadData uploadData = new UploadData();
 
-                            Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
+                        for (FileItem item : items) {
+                            if (item.isFormField()) {
+                                uploadData.putFormField(item.getFieldName(), item.getString());
+                            } else {
+                                String pathFromUser = contextId + File.separatorChar + item.getFieldName();
+                                String partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
+                                        .replaceAll("%2F", "/");
 
-                            UserFile userFile = new UserFile(destination)
-                                .setContentType(item.getContentType())
-                                .setRelativePath(partialPath);
+                                log.debug("partialPath: {}", partialPath);
+                                Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
 
-                            userFile.setAuthor(author);
+                                Files.createDirectories(destination.getParent());
 
-                            userFile.setDownloadUrl(buildURLString(MainApp.RESTAPI_ENDPOINT, "file", partialPath));
+                                Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
 
-                            log.debug("userFile.getDownloadUrl: {}", userFile.getDownloadUrl());
+                                UserFile userFile = new UserFile(destination)
+                                        .setContentType(item.getContentType())
+                                        .setRelativePath(partialPath);
 
-                            item.delete();
-                            uploadData.addFile(userFile);
+                                userFile.setAuthor(author);
+
+                                userFile.setDownloadUrl(buildURLString(MainApp.RESTAPI_ENDPOINT, "file", partialPath));
+
+                                log.debug("userFile.getDownloadUrl: {}", userFile.getDownloadUrl());
+
+                                item.delete();
+                                uploadData.addFile(userFile);
+                            }
                         }
+                        try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
+                            uploadData.getFiles().forEach(aUserFile -> {
+                                aUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
+                                        new ProxyUrl()
+                                                .setProxy(aUserFile.getRelativePath())
+                                                .setSha1(aUserFile.getSha1())
+                                                .setContentType(aUserFile.getContentType())
+                                                .setSize(aUserFile.getSize())
+                                ));
+                            });
+                        } catch (Exception e) {
+                            throw makeBadRequestException(e, exchange, "DB update error." , 500);
+                        }
+                        exchange.getOut().setBody(uploadData);
                     }
-                    try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
-                        uploadData.getFiles().forEach( aUserFile -> {
-                            aUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
-                                new ProxyUrl()
-                                    .setProxy(aUserFile.getRelativePath())
-                                    .setSha1(aUserFile.getSha1())
-                                    .setContentType(aUserFile.getContentType())
-                                    .setSize(aUserFile.getSize())
-                            ));
-                        });
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-
-                    exchange.getOut().setBody(uploadData);
+                } catch (Exception e) {
+                    throw makeBadRequestException(e, exchange, "Incomplete Request" , 400);
                 }
-            } catch (FileUploadException | IOException e) {
-                e.printStackTrace();
-            }
+
+//            else {
+
+
+//                log.debug("No media type in Header");
+//                exchange.getOut().setBody(new ErrorObject()
+//                    .setMessage("No media type in Header")
+//                    .setCode("Null media not allowed")
+//                    .setStatus(400));
+//                exchange.setException(new Throwable("No media type in Header"));
+//
+//            }
         }
+    }
+
+    private static B2BadRequestException makeBadRequestException(String msg, Exchange exchange, String submsg, int status) {
+        exchange.getOut().setBody(new ErrorObject()
+                .setMessage(msg)
+                .setCode(submsg)
+                .setStatus(status));
+
+        return new B2BadRequestException(msg);
+    }
+
+    public static B2BadRequestException makeBadRequestException(Exception e, Exchange exchange, String submsg, int status) {
+        return makeBadRequestException(e.getMessage(), exchange, submsg, status);
     }
 
     private URL buildURL(URL endpointURL, String... paths) {

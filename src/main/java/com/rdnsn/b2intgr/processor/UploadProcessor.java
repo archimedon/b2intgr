@@ -13,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
 import java.util.regex.Pattern;
 
+import com.rdnsn.b2intgr.route.B2BadRequestException;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.ProducerTemplate;
@@ -66,20 +67,28 @@ public class UploadProcessor extends BaseProcessor {
 			}).getOut().getBody(String.class),
 			GetUploadUrlResponse.class);
 	}
-	
+
 	@Override
-	public void process(Exchange exchange) throws Exception {
-		
-		final UserFile userFile = exchange.getIn().getBody(UserFile.class);
+	public void process(Exchange exchange) throws B2BadRequestException, UploadException {
+
+
+        final UserFile userFile = exchange.getIn().getBody(UserFile.class);
 		final AuthResponse remoteAuth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
 
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
-		final GetUploadUrlResponse uploadAuth =
-				doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
+		final GetUploadUrlResponse uploadAuth;
+        try {
+            uploadAuth = doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
+        } catch (IOException e) {
+            throw ZRouteBuilder.makeBadRequestException(e, exchange, "Problems receiving UploadAuthorization" , 403);
+        }
 
         final File file = Paths.get(userFile.getFilepath()).toFile();
+
         final String sha1 = sha1(file);
+
         userFile.setSha1(sha1);
+
 		final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS,innerExchg -> {
 
 			final Message postMessage = innerExchg.getIn();
@@ -99,8 +108,12 @@ public class UploadProcessor extends BaseProcessor {
 			postMessage.setBody(file);
 		}).getOut();
 
-		producer.stop();
-		final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+        try {
+            producer.stop();
+        } catch (Exception e) {
+           e.printStackTrace();
+        }
+        final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
 		log.info("HTTP_RESPONSE_CODE:{ '{}' XBzFileName: '{}'}", code, userFile.getRelativePath());
 

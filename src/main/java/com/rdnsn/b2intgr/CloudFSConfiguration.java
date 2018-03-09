@@ -2,6 +2,8 @@ package com.rdnsn.b2intgr;
 
 import java.io.File;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.validation.constraints.NotNull;
 
@@ -68,6 +70,17 @@ public class CloudFSConfiguration {
     @JsonProperty
     private int maxPoolSize = 10; // max number of clients in pool
 
+    @JsonProperty
+    private MailConfig mailConfig;
+
+    public MailConfig getMailConfig() {
+        return mailConfig;
+    }
+
+    public CloudFSConfiguration setMailConfig(MailConfig mailConfig) {
+        this.mailConfig = mailConfig;
+        return this;
+    }
 
     public Neo4JConfiguration getNeo4jConf() {
         return neo4jConf;

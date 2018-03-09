@@ -6,6 +6,7 @@ import java.nio.file.Paths;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.rdnsn.b2intgr.api.ErrorObject;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
@@ -19,6 +20,9 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UserFile implements Comparable<UserFile>, java.io.Serializable {
+
+    @JsonIgnore
+    private ErrorObject error;
 
     @JsonIgnore
     private String filepath;
@@ -83,6 +87,15 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 
     public UserFile setDownloadUrl(String downloadUrl) {
         this.downloadUrl = downloadUrl;
+        return this;
+    }
+
+    public ErrorObject getError() {
+        return error;
+    }
+
+    public UserFile setError(ErrorObject error) {
+        this.error = error;
         return this;
     }
 

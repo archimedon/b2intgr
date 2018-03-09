@@ -32,6 +32,7 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.restlet.data.MediaType;
+import org.restlet.engine.adapter.HttpRequest;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.InputRepresentation;
 import org.slf4j.Logger;
@@ -67,15 +68,30 @@ public class ZRouteBuilder extends RouteBuilder {
     private final String ppath_delete_files = "/b2api/v1/b2_delete_file_version" + HTTP4_PARAMS;
     private final String ppath_list_file_vers = "/b2api/v1/b2_list_file_versions" + HTTP4_PARAMS;
     private final String ppath_list_buckets = "/b2api/v1/b2_list_buckets" + HTTP4_PARAMS;
-    private String ppath_list_file_names = "/b2api/v1/b2_list_file_names";
-    private String servicePath = "/file";
+    private final String ppath_list_file_names = "/b2api/v1/b2_list_file_names";
+    private final String downloadServicePath = "/file";
+    private final URI mailURL;
 
     // // TODO: 2/13/18 url-encode the downloadURL
-    public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) {
+    public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) throws URISyntaxException {
         super();
         this.objectMapper = objectMapper;
         this.serviceConfig = serviceConfig;
         this.authAgent = authAgent;
+        this.mailURL = new URI(
+            "smtps",
+            null,
+            serviceConfig.getMailConfig().getHost(),
+            serviceConfig.getMailConfig().getPort(),
+            "",
+            String.format("username=%s&password=%s&to=%s",
+                serviceConfig.getMailConfig().getUsername(),
+                serviceConfig.getMailConfig().getPassword(),
+                serviceConfig.getMailConfig().getRecipients()
+            ),
+            null
+        );
+
         // enable Jackson json type converter
         getContext().getGlobalOptions().put("CamelJacksonEnableTypeConverter", "true");
         // allow Jackson json to convert to pojo types also
@@ -146,8 +162,19 @@ public class ZRouteBuilder extends RouteBuilder {
         };
 
         onException(UploadException.class)
-                .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
-                .redeliveryDelay(serviceConfig.getRedeliveryDelay());
+            .asyncDelayedRedelivery()
+            .maximumRedeliveries(serviceConfig.getMaximumRedeliveries())
+            .redeliveryDelay(serviceConfig.getRedeliveryDelay())
+                .backOffMultiplier(3)
+            .to("direct:mail")
+            .handled(true);
+
+
+//        onException(org.apache.camel.http.common.HttpOperationFailedException.class).process(exchange -> {
+////            ErrorObject err = exchange.getOut().getBody(ErrorObject.class);
+////            exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, err.getStatus());
+//            exchange.getOut().setBody("{ err: \"v\"}");
+//        }).handled(true);
 
         onException(B2BadRequestException.class).process(exchange -> {
             ErrorObject err = exchange.getOut().getBody(ErrorObject.class);
@@ -156,6 +183,10 @@ public class ZRouteBuilder extends RouteBuilder {
         }).handled(true);
 
         defineRestServer();
+
+        from("direct:mail")
+            .setHeader("subject", constant("BackBlaze Upload Failed"))
+            .to(mailURL.toString());
 
         // Authenticate
         from("direct:auth")
@@ -184,14 +215,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
         // Replies -> HREF to resource
         from("direct:rest.upload")
-//                .doTry()
-
                 .process(new SaveLocally())
-//                .doCatch(BadRequestException.class)
-//                .process(exchange -> exchange.getOut().copyFrom(exchange.getIn()))
-//                .doFinally()
-//                .to("mock:finally")
-//                .end()
                 // Send to b2
                 .wireTap("direct:b2upload")
                 .end()
@@ -243,6 +267,95 @@ public class ZRouteBuilder extends RouteBuilder {
                 .enrich(getHttp4Proto(authAgent.getApiUrl()) + ppath_list_file_vers, fileResponseAggregator)
                 .end();
 
+        from("direct:proxy")
+                .to("direct:auth", "direct:show");
+
+        from("direct:btouch")
+                .to("direct:auth", "direct:btouch_remote");
+
+        from("direct:btouch_remote")
+                .process(exchange -> {
+//                    TouchBucketRequest bt = exchange.getIn().getBody(TouchBucketRequest.class);
+//                    bt.setAccountId(serviceConfig.getRemoteAccountId());
+//
+
+//                    final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
+//                    exchange.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
+                    exchange.getOut().copyFromWithNewBody(
+                        exchange.getIn(),
+                        exchange.getIn()
+                            .getBody(TouchBucketRequest.class)
+                            .setAccountId(serviceConfig.getRemoteAccountId())
+                            .toString()
+                    );
+
+                    exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+
+
+//                    exchange.getOut().copyFromWithNewBody(exchange.getIn(), bt);
+
+//                    String bucketId = URLDecoder.decode(exchange.getIn().getHeader("bucketId", String.class), Constants.UTF_8)
+//                            .replaceAll(serviceConfig.getCustomSeparator(), "/");
+//
+//                    log.debug("got bt {}", bt);
+//                    exchange.getOut().setBody("{\"yo\": \"g\"}");
+                })
+                .enrich(getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_update_bucket", (Exchange original, Exchange resource) -> {
+                        original.getIn().copyFromWithNewBody(
+                                resource.getIn(),
+                                resource.getIn().getBody(String.class)
+                        );
+                        return original;
+                    })
+            .end();
+
+        from("direct:show")
+                .process((Exchange exchange) -> {
+
+                HttpRequest request
+                        = exchange.getIn().getHeader("CamelRestletRequest", HttpRequest.class);
+
+                // /[serviceContextUri][servicePath][partialPath]
+                // [/cloudfs/api/v1] [/file] [/top/site/images/v2/Flag_of_Jamaica.png]
+                String uri = request.getHttpCall().getRequestUri();
+                String ctx = serviceConfig.getContextUri() + downloadServicePath + "/";
+
+                String ppath = uri.substring(uri.indexOf(ctx) + ctx.length());
+                File file = new File(serviceConfig.getDocRoot() + File.separatorChar + ppath);
+
+                if (! file.exists()) {
+                    log.info("ppath: {} ", ppath);
+
+                    try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
+                        String needleKey = new URL(MainApp.RESTAPI_HOST, uri).toExternalForm();
+                        log.debug("needleKey : {}", needleKey);
+
+                        String actual = proxyMapUpdater.getActual(
+                                new ProxyUrl().setProxy(ppath)
+                        );
+
+                        log.debug("Found proxy-Actual: {}", actual);
+                        if (actual != null) {
+                            exchange.getOut().setHeader("Location", actual);
+                            exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, 301);
+
+                        }
+                        else {
+                            throw makeBadRequestException("Invalid URL.", exchange, "Neither file nor mapping exists." , 400);
+                        }
+                    }
+                }
+                else {
+                    InputStream is = new BufferedInputStream(new FileInputStream(file));
+                    String mimeType = URLConnection.guessContentTypeFromStream(is);
+                    is.close();
+
+                    exchange.getOut().setHeader(Exchange.CONTENT_TYPE, mimeType);
+                    exchange.getOut().setHeader(Exchange.CONTENT_LENGTH, file.length());
+                    exchange.getOut().setBody(file);
+                }
+            })
+        .end();
         from("direct:rm_files")
             .split(new Expression() {
                 @Override
@@ -283,7 +396,7 @@ public class ZRouteBuilder extends RouteBuilder {
             .end();
     }
 
-    private <T> T coerceClass(Message rsrcIn, Class<T> type) {
+    public <T> T coerceClass(Message rsrcIn, Class<T> type) {
         T obj = null;
         try {
             String string = rsrcIn.getBody(String.class);
@@ -321,29 +434,6 @@ public class ZRouteBuilder extends RouteBuilder {
             exchange.getOut().setBody(obj.getFiles().stream().map(usrf -> usrf).collect(Collectors.toList()));
         }
     }
-
-//    private Route getMailRoute() {
-//        private val subject = "OSLID - Web Mail"
-//
-//        private val username = params.get("username").get
-//        private val password = params.get("password").get
-//        private val host = params.get("host").get
-//        private val rcpt = params.get("rcpt").get
-//
-//        val opts = "?include=.*.txt&delay=1000&delete=true"
-//        private val sourceFolder =  s"""file:${params.get("sourceFolder").get}$opts"""
-//        private val destinationFolder =  s"""file:${params.get("destinationFolder").getOrElse("data/outbox")}"""
-//
-//
-//        val smtp = s"smtps://$host?username=$username&password=$password&to=$rcpt"
-//
-//        params.map(p => if (p._1.equals("password")) ("password","XXXXX") else p).foreach(p => log.info(p.toString))
-//        log.info(s"""(destinationFolder, $destinationFolder)""")
-//
-//        sourceFolder ==>
-//        setHeader("subject", constant(subject)) --> destinationFolder --> smtp
-//
-//    }
 
     private RestDefinition defineRestServer() {
         /**
@@ -392,61 +482,17 @@ public class ZRouteBuilder extends RouteBuilder {
                 .to("direct:rest.rm_files")
 
                 // Download
-                .get(servicePath + "/?matchOnUriPrefix=true")
-                .route()
-                .process(new Processor() {
-                    public void process(Exchange exchange) throws Exception {
+                .get(downloadServicePath + "/?matchOnUriPrefix=true")
+                .description("File reference")
+                .bindingMode(RestBindingMode.off)
+                .to("direct:proxy")
 
-                        org.restlet.engine.adapter.HttpRequest request
-                                = exchange.getIn().getHeader("CamelRestletRequest", org.restlet.engine.adapter.HttpRequest.class);
 
-                        // /[serviceContextUri][servicePath][partialPath]
-                        // [/cloudfs/api/v1] [/file] [/top/site/images/v2/Flag_of_Jamaica.png]
-                        String uri = request.getHttpCall().getRequestUri();
-                        String ctx = serviceConfig.getContextUri() + servicePath + "/";
-
-                        String ppath = uri.substring(uri.indexOf(ctx) + ctx.length());
-                        File file = new File(serviceConfig.getDocRoot() + File.separatorChar + ppath);
-
-                        if (! file.exists()) {
-                            log.info("ppath: {} ", ppath);
-
-                            try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
-                                String needleKey = new URL(MainApp.RESTAPI_HOST, uri).toExternalForm();
-                                log.debug("needleKey : {}", needleKey);
-
-                                String actual = proxyMapUpdater.getActual(
-                                    new ProxyUrl().setProxy(ppath)
-                                );
-
-                                log.debug("Found proxy-Actual: {}", actual);
-                                if (actual != null) {
-                                    exchange.getOut().setHeader("Location", actual);
-                                    exchange.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, 301);
-                                }
-                                else {
-                                    throw makeBadRequestException("Invalid URL.", exchange, "Neither file nor mapping exists." , 400);
-                                }
-                            }
-                        }
-                        else {
-//                            file.deleteOnExit();
-                            InputStream is = new BufferedInputStream(new FileInputStream(file));
-                            String mimeType = URLConnection.guessContentTypeFromStream(is);
-                            is.close();
-
-                            exchange.getOut().setHeader(Exchange.CONTENT_TYPE, mimeType);
-                            exchange.getOut().setHeader(Exchange.CONTENT_LENGTH, file.length());
-                            exchange.getOut().setBody(file);
-                        }
-                    }
-                }).endRest();
-//                .description("File reference")
-//                .bindingMode(RestBindingMode.off)
-//
-//				.to("direct:proxy")
-//                .produces("application/json")
-//                .to("direct:rest.list_buckets")
+                // Download
+                .put("/btouch").type(TouchBucketRequest.class)
+                .description("Update bucket")
+                .bindingMode(RestBindingMode.auto)
+                .to("direct:btouch");
 
 
         /**
@@ -568,7 +614,7 @@ public class ZRouteBuilder extends RouteBuilder {
         }
     }
 
-    private static B2BadRequestException makeBadRequestException(String msg, Exchange exchange, String submsg, int status) {
+    public static B2BadRequestException makeBadRequestException(String msg, Exchange exchange, String submsg, int status) {
         exchange.getOut().setBody(new ErrorObject()
                 .setMessage(msg)
                 .setCode(submsg)

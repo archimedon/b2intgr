@@ -11,8 +11,10 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
+import java.util.Map;
 import java.util.regex.Pattern;
 
+import com.rdnsn.b2intgr.api.ErrorObject;
 import com.rdnsn.b2intgr.route.B2BadRequestException;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
@@ -22,9 +24,7 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.rdnsn.b2intgr.CloudFSConfiguration;
@@ -55,18 +55,18 @@ public class UploadProcessor extends BaseProcessor {
 		}
 	}
 
-	private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authUploadUrl, final String authtoken) throws JsonParseException, JsonMappingException, IOException {
+    private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authUploadUrl, final String authtoken) throws IOException {
 
-		String uri = getHttp4Proto(authUploadUrl) + ZRouteBuilder.HTTP4_PARAMS;
+        String uri = getHttp4Proto(authUploadUrl) + ZRouteBuilder.HTTP4_PARAMS;
 
-		return objectMapper.readValue(
-			producer.send(uri, (Exchange exchange) -> {
-				exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-				exchange.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
-				exchange.getIn().setBody(bucketMap);
-			}).getOut().getBody(String.class),
-			GetUploadUrlResponse.class);
-	}
+        return objectMapper.readValue(
+            producer.send(uri, (Exchange exchange) -> {
+                exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+                exchange.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
+                exchange.getIn().setBody(bucketMap);
+            }).getOut().getBody(String.class),
+            GetUploadUrlResponse.class);
+    }
 
 	@Override
 	public void process(Exchange exchange) throws B2BadRequestException, UploadException {
@@ -79,45 +79,47 @@ public class UploadProcessor extends BaseProcessor {
 		final GetUploadUrlResponse uploadAuth;
         try {
             uploadAuth = doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw ZRouteBuilder.makeBadRequestException(e, exchange, "Problems receiving UploadAuthorization" , 403);
         }
 
         final File file = Paths.get(userFile.getFilepath()).toFile();
 
-        final String sha1 = sha1(file);
+
+        String sha1 = sha1(file);
 
         userFile.setSha1(sha1);
 
-		final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS,innerExchg -> {
+        if (log.isDebugEnabled()) {
+            Integer ctr = null;
 
-			final Message postMessage = innerExchg.getIn();
-			postMessage.setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+            if (null == (ctr = exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class))) {
+                ctr = 0;
+            }
 
-			postMessage.setHeader(Constants.X_BZ_FILE_NAME, userFile.getRelativePath());
-			
-//			if (log.isDebugEnabled()) {
-//				corruptSomeHashes(sha1, exchange, file);
-//			}
-			postMessage.setHeader(Constants.X_BZ_CONTENT_SHA1, sha1);
+            log.debug("Redelivery counter: " + ctr);
 
-			postMessage.setHeader(Exchange.CONTENT_LENGTH, Long.toString(userFile.getSize()));
-			postMessage.setHeader(Exchange.CONTENT_TYPE, userFile.getContentType());
-			postMessage.setHeader(Constants.AUTHORIZATION, uploadAuth.getAuthorizationToken());
-			postMessage.setHeader(Constants.X_BZ_INFO_AUTHOR, userFile.getAuthor());
-			postMessage.setBody(file);
-		}).getOut();
-
-        try {
-            producer.stop();
-        } catch (Exception e) {
-           e.printStackTrace();
+            if (Pattern.matches("^\\d{4}.+?\\..+", file.getName())
+                && ctr < serviceConfig.getMaximumRedeliveries() - 1
+            ) {
+                sha1 = sha1 + 'e';
+                userFile.setSha1(sha1);
+                log.debug("pattern matches: '{}'", file.getName());
+                log.debug("Flipped '{}' sha: {}", file.getName(), userFile.getSha1());
+            }
         }
+
+        final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + "?throwExceptionOnFailure=false&okStatusCodeRange=100", innerExchg -> {
+            innerExchg.getIn().setHeaders(buildParams(userFile, uploadAuth.getAuthorizationToken()));
+            innerExchg.getIn().setBody(file);
+
+        }).getOut();
+
         final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
 		log.info("HTTP_RESPONSE_CODE:{ '{}' XBzFileName: '{}'}", code, userFile.getRelativePath());
 
-		if (HttpStatus.SC_OK == code) {
+		if (code != null && HttpStatus.SC_OK == code) {
             // TODO: 3/2/18 Fix DownloadURL setting. Would prefer a single point.
 			final String downloadUrl =  String.format("%s/file/%s/%s",
                 remoteAuth.getDownloadUrl(),
@@ -136,9 +138,36 @@ public class UploadProcessor extends BaseProcessor {
 			}
 		}
 		else {
-			throw new UploadException("Response code fail (" + code + ") File '" + userFile.getRelativePath() +"' not uploaded" );
+            ErrorObject errorObject =  coerceClass(responseOut, ErrorObject.class);
+            log.debug("errorObject: {} ", errorObject);
+            userFile.setError(errorObject);
+            throw new UploadException("Response code fail (" + code + ") File '" + userFile.getRelativePath() +"' not uploaded" );
 		}
 	}
+
+    public <T> T coerceClass(Message rsrcIn, Class<T> type) {
+        T obj = null;
+        try {
+            String string = rsrcIn.getBody(String.class);
+            obj = objectMapper.readValue(string, type);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return obj;
+    }
+
+    private Map<String, Object> buildParams(UserFile userFile, String authtoken) {
+
+        return ImmutableMap.<String, Object> builder()
+            .put(Exchange.HTTP_METHOD, HttpMethods.POST)
+            .put(Constants.X_BZ_FILE_NAME, userFile.getRelativePath())
+            .put(Constants.X_BZ_CONTENT_SHA1, userFile.getSha1())
+            .put(Exchange.CONTENT_LENGTH, Long.toString(userFile.getSize()))
+            .put(Exchange.CONTENT_TYPE, userFile.getContentType())
+            .put(Constants.AUTHORIZATION, authtoken)
+            .put(Constants.X_BZ_INFO_AUTHOR, userFile.getAuthor())
+            .build();
+    }
 
 	/**
 	 * Only used in testing. To force an error response from Backblaze.
@@ -148,12 +177,15 @@ public class UploadProcessor extends BaseProcessor {
 	 * @param exchange
 	 * @param file
 	 */
-	private void corruptSomeHashes(String sha1, Exchange exchange, File file) {
-		
+	private void corruptAHash(String sha1, Exchange exchange, File file) {
+		int ctr = exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class);
+		log.info("Redelivery counter: " + ctr);
+
 		if (Pattern.matches("^[\\d{3}\\d+].*" , file.getName())
-				&& exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class) < 1)
+				&& ctr < serviceConfig.getMaximumRedeliveries() - 1)
 		{
 			sha1 = sha1 + 'e';
+			log.info("Fliped it: {}", sha1);
 		}
 	}
 

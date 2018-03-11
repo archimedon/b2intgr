@@ -21,6 +21,9 @@ public class UploadFileResponse extends B2FileItem {
 	@JsonProperty
 	private Long transientId;
 
+	@JsonProperty
+	private String bucketType;
+
 
 	public Long getTransientId() {
 		return transientId;
@@ -55,6 +58,15 @@ public class UploadFileResponse extends B2FileItem {
 
 	public UploadFileResponse setBucketId(String bucketId) {
 		this.bucketId = bucketId;
+		return this;
+	}
+
+	public String getBucketType() {
+		return bucketType;
+	}
+
+	public UploadFileResponse setBucketType(String bucketType) {
+		this.bucketType = bucketType;
 		return this;
 	}
 }

@@ -3,9 +3,13 @@ package com.rdnsn.b2intgr.dao;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdnsn.b2intgr.Neo4JConfiguration;
 import com.rdnsn.b2intgr.model.ProxyUrl;
+import org.apache.commons.beanutils.BeanUtils;
+import org.apache.commons.beanutils.PropertyUtils;
 import org.neo4j.driver.v1.*;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -130,6 +134,82 @@ public class ProxyUrlDAO implements AutoCloseable {
         }
     }
 
+
+    public ProxyUrl getProxyUrl(final ProxyUrl proxyUrl) {
+
+        ProxyUrl found = new ProxyUrl();
+
+        try (Session session = getSession()) {
+            ProxyUrl resData = session.writeTransaction((Transaction tx) ->
+            {
+                StatementResult result = tx.run("MATCH (p:ProxyUrl) WHERE p.proxy = $purl RETURN properties(p)",
+                        parameters("purl", proxyUrl.getProxy()));
+
+                if (result.hasNext()) {
+
+                    Record res = result.single();
+                    if (res.size() > 0) {
+                        try {
+                            HashMap map = new HashMap(res.get(0).asMap() );
+                            System.err.format("map: %s%n", map);
+
+                            copyProperties(found, map);
+//                            BeanUtils.copyProperties(found, map);
+
+                            System.err.format("found: %s%n", found);
+
+
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+
+                return found;
+            });
+            return resData;
+        }
+    }
+
+    private void copyProperties(ProxyUrl found, Map<String, Object> data) {
+
+
+        Class<?> clazz = ProxyUrl.class;
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            try {
+                Field field = clazz.getDeclaredField(entry.getKey()); //get the field by name
+                if (field != null) {
+                    field.setAccessible(true); // for private fields
+                    field.set(found, entry.getValue()); // set the field's value for your object
+                }
+            } catch (NoSuchFieldException | SecurityException e) {
+                e.printStackTrace();
+                // handle
+            } catch (IllegalArgumentException e) {
+                e.printStackTrace();
+                // handle
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+                // handle
+            }
+        }
+    }
+
+//    private void copyProperties(ProxyUrl found, Map<String, Object> map) {
+//
+//        map.entrySet().forEach( (Map.Entry<String, Object> entry) -> {
+//            try {
+//                System.err.format("key: %s , val: %s %n", entry.getKey(), entry.getValue().toString());
+//                BeanUtils.setProperty(found, entry.getKey(), entry.getValue());
+//            } catch (IllegalAccessException e) {
+//                e.printStackTrace();
+//            } catch (InvocationTargetException e) {
+//                e.printStackTrace();
+//            }
+//        });
+//
+//    }
+//
     synchronized private Session getSession() {
         return driver.session();
     }

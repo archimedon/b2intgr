@@ -43,31 +43,39 @@ public class UploadProcessor extends BaseProcessor {
 	
 	private final ObjectMapper objectMapper;
 	private final CloudFSConfiguration serviceConfig;
-	private final String bucketMap;
+//	private final String bucketMap;
     
 	public UploadProcessor(CloudFSConfiguration serviceConfig, ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
 		this.serviceConfig = serviceConfig;
-		try {
-			this.bucketMap = objectMapper.writeValueAsString(ImmutableMap.of("bucketId", serviceConfig.getRemoteBucketId()));
-		} catch (JsonProcessingException e) {
-			throw new RuntimeException(e.getCause());
-		}
+//		try {
+//			this.bucketMap = objectMapper.writeValueAsString(ImmutableMap.of("bucketId", serviceConfig.getRemoteBucketId()));
+//		} catch (JsonProcessingException e) {
+//			throw new RuntimeException(e.getCause());
+//		}
 	}
 
-    private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, String authUploadUrl, final String authtoken) throws IOException {
+    private GetUploadUrlResponse doPreamble(final ProducerTemplate producer, AuthResponse remoteAuth, final String buckectId) throws IOException {
 
-        String uri = getHttp4Proto(authUploadUrl) + ZRouteBuilder.HTTP4_PARAMS;
 
         return objectMapper.readValue(
-            producer.send(uri, (Exchange exchange) -> {
+            producer.send( getHttp4Proto(remoteAuth.resolveGetUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS, (Exchange exchange) -> {
                 exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-                exchange.getIn().setHeader(Constants.AUTHORIZATION, authtoken);
-                exchange.getIn().setBody(bucketMap);
+                exchange.getIn().setHeader(Constants.AUTHORIZATION, remoteAuth.getAuthorizationToken());
+                exchange.getIn().setBody(objectToString(ImmutableMap.<String, String>of("bucketId", buckectId)));
             }).getOut().getBody(String.class),
             GetUploadUrlResponse.class);
     }
 
+    private String objectToString(Object t) {
+	    String out = null;
+        try {
+            out = objectMapper.writeValueAsString(t);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e.getCause());
+        }
+    return out;
+    }
 	@Override
 	public void process(Exchange exchange) throws B2BadRequestException, UploadException {
 
@@ -78,7 +86,7 @@ public class UploadProcessor extends BaseProcessor {
 		final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
 		final GetUploadUrlResponse uploadAuth;
         try {
-            uploadAuth = doPreamble(producer, remoteAuth.resolveGetUploadUrl(), remoteAuth.getAuthorizationToken());
+            uploadAuth = doPreamble(producer, remoteAuth, userFile.getBucketId());
         } catch (Exception e) {
             throw ZRouteBuilder.makeBadRequestException(e, exchange, "Problems receiving UploadAuthorization" , 403);
         }
@@ -112,7 +120,6 @@ public class UploadProcessor extends BaseProcessor {
         final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + "?throwExceptionOnFailure=false&okStatusCodeRange=100", innerExchg -> {
             innerExchg.getIn().setHeaders(buildParams(userFile, uploadAuth.getAuthorizationToken()));
             innerExchg.getIn().setBody(file);
-
         }).getOut();
 
         final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);

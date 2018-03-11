@@ -56,7 +56,7 @@ public class AuthAgent implements AggregationStrategy {
             response.getEntity().writeTo(buf);
             authResponse = objectMapper.readValue(buf.toString(Constants.UTF_8), AuthResponse.class);
             log.info("B2 Authorization Received");
-
+            log.debug("Authorization: {}", authResponse.getAuthorizationToken());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -75,7 +75,8 @@ public class AuthAgent implements AggregationStrategy {
         original.getIn().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
 
         if (original.getPattern().isOutCapable()) {
-            original.getOut().setBody( original.getIn().getBody());
+            original.getOut().copyFrom(original.getIn());
+//            original.getOut().setBody( original.getIn().getBody());
             original.getOut().setHeader(Constants.AUTH_RESPONSE, auth);
             original.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
 	    }

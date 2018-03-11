@@ -28,6 +28,9 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
     private String filepath;
 
     @JsonProperty
+    String bucketId;
+
+    @JsonProperty
     private Long transientId;
 
     @JsonProperty
@@ -74,6 +77,15 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
 
     public String getAuthor() {
         return author;
+    }
+
+    public String getBucketId() {
+        return bucketId;
+    }
+
+    public UserFile setBucketId(String bucketId) {
+        this.bucketId = bucketId;
+        return this;
     }
 
     public UserFile setAuthor(String author) {

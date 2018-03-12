@@ -1,0 +1,43 @@
+{
+  "host": "localhost",
+  "port": 8080,
+  "contextUri": "/cloudfs/api/v1",
+  "docRoot": "/tmp/b2intgr",
+  "protocol": "http",
+  "customSeparator": "\\^",
+  "adminEmail": "ronniedz@gmail.com",
+  "maximumRedeliveries": 4,
+  "redeliveryDelay": 3000,
+  "poolSize": 5,
+  "maxPoolSize": 10,
+  "neo4jConf": {
+    "urlString": "bolt://localhost:7687",
+    "username": "neo4j",
+    "password": "reggae"
+  },
+  "mailConfig": {
+    "host": "smtp.gmail.com",
+    "port": 465,
+    "username": "a2zlangmgr@gmail.com",
+    "password": "r3664370n",
+    "recipients": "ronniedz1s@yahoo.com"
+  },
+    "remoteStorageConf": {
+    "bucket": {
+      "bucketName": "b2public",
+      "bucketId": "2ab327a44f788e635ef20613"
+    },
+    "accountId": "a374f8e3e263",
+    "applicationKey": "0012091458045a46b01b14df849c659aebb820a53c",
+    "authenticationUrl": "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"
+  }
+}
+
+
+/*
+"username"  -> Option(System.getenv("SMTP_USER")).getOrElse("a2zlangmgr@gmail.com"),
+"password"  -> Option(System.getenv("SMTP_PASS")).getOrElse("password"),
+"host"      -> Option(System.getenv("SMTP_HOST")).getOrElse("smtp.gmail.com:465"),
+"rcpt"      -> Option(System.getenv("SMTP_RCPTS")).getOrElse("garrickajo@gmail.com, ronniedz1s@yahoo.com"),
+
+ */

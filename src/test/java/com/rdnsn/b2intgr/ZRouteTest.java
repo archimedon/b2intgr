@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 
-public class TestZRoute extends CamelTestSupport {
+public class ZRouteTest extends CamelTestSupport {
 
     private static final String ENV_PREFIX = "B2I_";
     private static final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";

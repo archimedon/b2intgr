@@ -32,12 +32,3 @@
     "authenticationUrl": "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"
   }
 }
-
-
-/*
-"username"  -> Option(System.getenv("SMTP_USER")).getOrElse("a2zlangmgr@gmail.com"),
-"password"  -> Option(System.getenv("SMTP_PASS")).getOrElse("password"),
-"host"      -> Option(System.getenv("SMTP_HOST")).getOrElse("smtp.gmail.com:465"),
-"rcpt"      -> Option(System.getenv("SMTP_RCPTS")).getOrElse("garrickajo@gmail.com, ronniedz1s@yahoo.com"),
-
- */

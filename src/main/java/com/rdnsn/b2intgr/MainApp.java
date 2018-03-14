@@ -158,14 +158,15 @@ public class MainApp {
 
     private CloudFSConfiguration doEnvironmentOverrides(CloudFSConfiguration confObject, String confFile) throws IOException {
         Map<String, Object> propValueMap = objectMapper.readValue(confFile, HashMap.class);
-        crawl(propValueMap)
-            .forEach( propName -> {
+        crawl(propValueMap).forEach( propName -> {
             String ev = null;
+                // Replace dot with underscore because linux no like dot
+            if ( (ev = System.getenv(ENV_PREFIX + propName.replaceAll("\\.", "_") )) != null
+                || (ev = System.getenv(ENV_PREFIX + propName )) != null) {
 
-            if ( (ev = System.getenv(ENV_PREFIX + propName )) != null) {
                 try {
-                    if (propName.indexOf('_') > 0) {
-                        PropertyUtils.setNestedProperty(confObject, propName.replaceAll("_", "."), ev);
+                    if (propName.indexOf('.') > 0) {
+                        PropertyUtils.setNestedProperty(confObject, propName, ev);
                     }
                     else {
                         BeanUtils.setProperty(confObject, propName, ev);
@@ -176,6 +177,7 @@ public class MainApp {
                 }
             }
         });
+
         return confObject;
     }
 

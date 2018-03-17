@@ -8,7 +8,7 @@ import org.apache.camel.Exchange;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rdnsn.b2intgr.Constants;
+import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.api.AuthResponse;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;

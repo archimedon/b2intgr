@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-PRG="$0"
-
-JAR_FILE='target/b2intgr-0.0.1.jar'
 
 JAVA_CMD="`which java` -jar"
 NODE_CMD="`which node`"
@@ -10,40 +7,40 @@ NODE_CMD="`which node`"
 QUEUE_PORT=${Q_PORT:-8080}
 WEB_PORT=${PORT:-80}
 
-# Get standard environment variables
-BIN=$(dirname "$PRG")
-APP_HOME=`cd "$BIN/.." >/dev/null; pwd`
-if [ -z $APP_HOME ]; then
-    APP_HOME=./
-fi
 
-JTARGET="${APP_HOME}/${JAR_FILE}"
-NODE_CMD="$NODE_CMD ${APP_HOME}/index.js"
+read_dom () {
+    local IFS=\>
+    read -d \< ENTITY CONTENT
+    local RET=$?
+    TAG_NAME=${ENTITY%% *}
+    ATTRIBUTES=${ENTITY#* }
+    return $RET
+}
 
-if [ ! -f "$JTARGET" ]; then
-    mvn clean compile package >/dev/null 2>&1
-fi
+get_target_name () {
+    let CTR=0
+    JARNAME=''
+    JVER=''
+    JPKG=''
 
-# Add Java args
-JTARGET="${JTARGET} -DQPORT=$QUEUE_PORT";
+    while read_dom; do
 
-RUN_DIR="${APP_HOME}/run"
-
-if [ ! -d "$RUN_DIR" ]; then
-    mkdir $RUN_DIR;
-fi
-
-ZQUEUE_PIDFILE="${RUN_DIR}/zqueue.pid"
-NODE_PIDFILE="${RUN_DIR}/node.pid"
-
-let SLEEP=2
-
-echo  "APP_HOME: ${APP_HOME}, ZQUEUE_PIDFILE: ${ZQUEUE_PIDFILE}, \
-RUN_DIR Directory: ${RUN_DIR}, NODE_CMD: ${NODE_CMD}, JTARGET: ${JTARGET}" >&2
-
-# Clear user defined CLASSPATH
-# CLASSPATH=
-
+        if [[ $ENTITY = "artifactId" ]]; then
+            JARNAME="$CONTENT"
+            ((CTR+=1))
+        elif [[ $ENTITY = "version" ]]; then
+            JVER="$CONTENT"
+            ((CTR+=1))
+        elif [[ $ENTITY = "packaging" ]]; then
+            JPKG="$CONTENT"
+            ((CTR+=1))
+        fi
+        if [[ $CTR -eq 3 ]]; then
+            echo "${JARNAME}-${JVER}.${JPKG}"
+            break;
+        fi
+    done < 'pom.xml'
+}
 
 function start_node {
 
@@ -79,27 +76,39 @@ function start_node {
 
 function stop_zqueue {
 
-  if [ ! -z "$ZQUEUE_PIDFILE" ]; then
-    if [ -f $ZQUEUE_PIDFILE ]; then
+  PID=''
+
+  if [ ! -z "$ZQUEUE_PIDFILE" ] && [ -f $ZQUEUE_PIDFILE ]; then
       PID=`cat "$ZQUEUE_PIDFILE"`
       while [ $SLEEP -ge 0 ]; do
         kill -9 "$PID" >/dev/null 2>&1
         if [ $? -gt 0 ]; then
           rm -f "$ZQUEUE_PIDFILE" >/dev/null 2>&1
           echo  "Killed Process: $PID" >&2
-          break
+          return 0
         else
           sleep $SLEEP
-          let SLEEP-=1
+          ((SLEEP-=1))
         fi
       done
-    fi
-  fi
-  PID=`ps -eo 'tty pid args' | grep 'b2intgr' | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
+  else
 
-  ps -p $PID >/dev/null 2>&1
-  if [ $? -eq 0 ] ; then
-    kill -9 $PID >/dev/null 2>&1
+      PID=`ps -eo 'tty pid args' | grep "$target_name" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
+
+      if [ ! -z "$PID" ]; then
+         echo  "Killed Process: $PID"
+       kill -KILL $PID >/dev/null 2>&1
+      fi
+
+      PID=`ps -eo 'tty pid args' | grep "$PRG" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
+      if [ ! -z "$PID" ]; then
+        ps -p $PID >/dev/null 2>&1
+        if [ $? -eq 0 ] ; then
+           echo  "Killing process: $PID" >&2
+           kill -9 $PID 1>/dev/null
+        fi
+      fi
+
   fi
 }
 
@@ -107,28 +116,15 @@ function stop_zqueue {
 function start_zqueue {
 #while [[ nc -z localhost $QUEUE_PORT && $max_tries -ne 0 ]]; do
     if nc -z localhost $QUEUE_PORT; then
-#        echo  port $QUEUE_PORT is not free! >&2
-#        echo  Attempting shutdown! >&2
+        # port $QUEUE_PORT is not open! >&2
         stop_zqueue
     fi
-
-#    echo  "$JAVA_CMD $JTARGET $@" >&2
 
     ${JAVA_CMD} $JTARGET "$@" &
 
     let QUEUE_PID=$!
-#    echo  $QUEUE_PID >&2
 	## Store PID
     echo  -n $QUEUE_PID > $ZQUEUE_PIDFILE
 	echo  "Starting 'Router' (pid: ${QUEUE_PID}) ..." >&2
 }
 
-if [ "$1" = "start" ]; then
-    $(start_node) && $(start_zqueue) >/dev/null 2>&1
-elif [ "$1" = "stop" ]; then
-  stop_zqueue
-fi
-
-
-
-exit 0

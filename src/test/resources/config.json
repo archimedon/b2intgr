@@ -11,7 +11,7 @@
   "poolSize": 5,
   "maxPoolSize": 10,
   "neo4jConf": {
-    "urlString": "bolt://localhost:7687",
+    "urlString": "bolt://localhost:7689",
     "username": "neo4j",
     "password": "reggae"
   },

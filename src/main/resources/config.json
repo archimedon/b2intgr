@@ -22,7 +22,7 @@
     "password": "r3664370n",
     "recipients": "ronniedz1s@yahoo.com"
   },
-    "remoteStorageConf": {
+  "remoteStorageConf": {
     "bucket": {
       "bucketName": "b2public",
       "bucketId": "2ab327a44f788e635ef20613"

@@ -1,32 +1,14 @@
 package com.rdnsn.b2intgr.processor;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.camel.Exchange;
-import org.apache.camel.Message;
 import org.apache.camel.Processor;
-import org.apache.commons.fileupload.FileItem;
-import org.apache.commons.fileupload.FileUploadException;
-import org.apache.commons.fileupload.disk.DiskFileItemFactory;
-import org.restlet.data.MediaType;
-import org.restlet.ext.fileupload.RestletFileUpload;
-import org.restlet.representation.InputRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.google.common.collect.ImmutableMap;
-import com.rdnsn.b2intgr.Constants;
+import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.api.AuthResponse;
 
 public abstract class CloudFSProcessor implements Processor {

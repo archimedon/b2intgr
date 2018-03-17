@@ -17,6 +17,7 @@ import com.google.common.collect.ImmutableList;
 import com.rdnsn.b2intgr.MainApp;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.model.ProxyUrl;
+import com.rdnsn.b2intgr.util.JsonHelper;
 import org.apache.camel.*;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.http4.HttpMethods;
@@ -39,7 +40,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.rdnsn.b2intgr.api.*;
 import com.rdnsn.b2intgr.CloudFSConfiguration;
-import com.rdnsn.b2intgr.Constants;
+import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.model.UploadData;
 import com.rdnsn.b2intgr.model.UserFile;
 import com.rdnsn.b2intgr.processor.AuthAgent;
@@ -130,8 +131,11 @@ public class ZRouteBuilder extends RouteBuilder {
 
         final AggregationStrategy fileResponseAggregator = (Exchange original, Exchange resource) -> {
 
+//            log.error("original Headers: {}", resource.getIn().getHeaders().entrySet().stream().map( entry -> String.format("name: %s%nvalue: %s", entry.getKey(), "" + entry.getValue())).collect(Collectors.toList()));
+
+            original.getOut().removeHeader(Constants.AUTHORIZATION);
             // TODO: 3/6/18 Get rid of BiFunc MakeDownloadURL()
-            original.getOut().setBody(coerceClass(resource.getIn(), ListFilesResponse.class).setMakeDownloadUrl(file ->
+            original.getOut().setBody(JsonHelper.coerceClass(objectMapper, resource.getIn(), ListFilesResponse.class).setMakeDownloadUrl(file ->
                buildURLString(authAgent.getAuthResponse().getDownloadUrl(), "file", serviceConfig.getRemoteStorageConf().getBucketName(), file.getFileName())
             ));
             return original;
@@ -142,6 +146,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
 //            String bucketId = exchange.getIn().getHeader("bucketId", String.class);
 //            String bucketId = URLDecoder.decode(exchange.getIn().getHeader("bucketId", String.class), Constants.UTF_8);
+//            log.error("createPostFileList Headers: {}", exchange.getIn().getHeaders().entrySet().stream().map( entry -> String.format("name: %s%nvalue: %s", entry.getKey(), "" + entry.getValue())).collect(Collectors.toList()));
 
 //            log.debug(" bucketId: {}", bucketId);
             ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
@@ -186,7 +191,7 @@ public class ZRouteBuilder extends RouteBuilder {
 
         defineRestServer();
 
-        from("direct:mail")
+        from("direct:mail").id("mailman")
             .setHeader("subject", constant("BackBlaze Upload Failed"))
             .to(mailURL.toString());
 
@@ -364,7 +369,7 @@ public class ZRouteBuilder extends RouteBuilder {
 //                    original.getOut().setBody(respBody);
 //                }
 //                else {
-////                    ErrorObject errorObject =  coerceClass(resource.getOut(), ErrorObject.class);
+////                    ErrorObject errorObject =  JsonHelper.coerceClass(objectMapper, resource.getOut(), ErrorObject.class);
 ////                    log.debug("errorObject: {} ", errorObject);
 ////                    original.getOut().setBody(errorObject);
 //                    String respBody = resource.getOut().getBody(String.class);
@@ -458,13 +463,13 @@ public class ZRouteBuilder extends RouteBuilder {
 
                     final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
-                    FileResponse postedData = coerceClass(original.getIn(), FileResponse.class);
+                    FileResponse postedData = JsonHelper.coerceClass(objectMapper, original.getIn(), FileResponse.class);
                     log.debug("postedData: {} ", postedData );
 
                     log.debug("code {}", code);
 
                     if (code == null || HttpStatus.SC_OK != code) {
-                        ReadsError respData = coerceClass(resource.getIn(), ErrorObject.class);
+                        ReadsError respData = JsonHelper.coerceClass(objectMapper, resource.getIn(), ErrorObject.class);
 //                        String respData = resource.getIn().getBody(String.class);
                         log.debug("respData: " + respData);
                         postedData.setError(respData);
@@ -478,17 +483,6 @@ public class ZRouteBuilder extends RouteBuilder {
                 }
             ).outputType(FileResponse.class)
             .end();
-    }
-
-    public <T> T coerceClass(Message rsrcIn, Class<T> type) {
-        T obj = null;
-        try {
-            String string = rsrcIn.getBody(String.class);
-            obj = objectMapper.readValue(string, type);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return obj;
     }
 
     public static final Pattern httpPattern = Pattern.compile("(https{0,1})(.+)");
@@ -527,11 +521,11 @@ public class ZRouteBuilder extends RouteBuilder {
                 .componentProperty("urlDecodeHeaders", "true").skipBindingOnErrorCode(false)
                 .dataFormatProperty("prettyPrint", "true").componentProperty("chunked", "true");
 
-        return rest(serviceConfig.getContextUri())
+        return rest(serviceConfig.getContextUri()).id("B2IntgrRest")
                 .produces("application/json")
 
                 // Upload a File
-                .post("/upload/{bucketId}/{author}/{destDir}")
+                .post("/upload/{bucketId}/{author}/{destDir}").id("UploadFiles")
                 .description("Upload (and revise) files. Uploading to the same name and path results in creating a new <i>version</i> of the file.")
                 .bindingMode(RestBindingMode.off)
                 .consumes("multipart/form-data")
@@ -539,7 +533,7 @@ public class ZRouteBuilder extends RouteBuilder {
                 .to("direct:rest.multipart")
 
                 // List Buckets
-                .get("/list")
+                .get("/list").id("ListBuckets")
                 .description("List buckets")
                 .bindingMode(RestBindingMode.off)
                 .produces("application/json")

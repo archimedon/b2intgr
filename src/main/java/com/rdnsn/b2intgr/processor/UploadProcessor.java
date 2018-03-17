@@ -16,6 +16,7 @@ import java.util.regex.Pattern;
 
 import com.rdnsn.b2intgr.api.ErrorObject;
 import com.rdnsn.b2intgr.route.B2BadRequestException;
+import com.rdnsn.b2intgr.util.JsonHelper;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.ProducerTemplate;
@@ -28,7 +29,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.rdnsn.b2intgr.CloudFSConfiguration;
-import com.rdnsn.b2intgr.Constants;
+import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.api.AuthResponse;
 import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
 import com.rdnsn.b2intgr.api.UploadFileResponse;
@@ -62,20 +63,11 @@ public class UploadProcessor extends BaseProcessor {
             producer.send( getHttp4Proto(remoteAuth.resolveGetUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS, (Exchange exchange) -> {
                 exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
                 exchange.getIn().setHeader(Constants.AUTHORIZATION, remoteAuth.getAuthorizationToken());
-                exchange.getIn().setBody(objectToString(ImmutableMap.<String, String>of("bucketId", buckectId)));
+                exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, ImmutableMap.<String, String>of("bucketId", buckectId)));
             }).getOut().getBody(String.class),
             GetUploadUrlResponse.class);
     }
 
-    private String objectToString(Object t) {
-	    String out = null;
-        try {
-            out = objectMapper.writeValueAsString(t);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e.getCause());
-        }
-    return out;
-    }
 	@Override
 	public void process(Exchange exchange) throws B2BadRequestException, UploadException {
 

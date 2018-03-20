@@ -162,7 +162,54 @@ public class ZRouteTest extends CamelTestSupport {
         assertTrue(((String)fileItem.get("fileName")).startsWith((String) body.get("prefix")));
 
     }
-
+//
+//
+//    @Test
+//    public void testUpload() throws Exception {
+//
+//        final Map<String, Object> body = ImmutableMap.of(
+//                "bucketId", bucketId,
+//                "startFileName" , "",
+//                "prefix" , "hh/site/images/v2/",
+//                "delimiter" , "/",
+//                "maxFileCount" , 70
+//        );
+//
+//        final String token = authAgent.getAuthResponse().getAuthorizationToken();
+//        LOG.error("Token: {}", token);
+//
+//        final Message responseOut = template.send(LIST_VERSIONS_URI, (exchange) -> {
+//
+//            // Ensure Empty
+//            exchange.getIn().removeHeaders("*");
+//            exchange.getIn().setBody(null);
+//
+//            exchange.getIn().setHeader(Constants.AUTHORIZATION, token);
+//            exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+//
+//            exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, body));
+//
+//        }).getOut();
+//
+////        LOG.debug("Headers: {}",
+////            responseOut.getHeaders().entrySet().stream().map( entry -> String.format("name: %s%nvalue: %s", entry.getKey(), "" + entry.getValue())).collect(Collectors.toList()));
+//
+//        Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+//
+//        assertNotNull("code expected", code);
+//        assertEquals(HttpStatus.SC_OK, code.longValue());
+//
+//        Map<String, List<Map<String, Object>>> filesWrap = JsonHelper.coerceClass(objectMapper, responseOut, HashMap.class);
+//        List<Map<String, Object>> files = List.class.cast(filesWrap.get("files"));
+//        Map<String, Object> fileItem = files.get(0);
+//
+//
+//        assertNotNull("files List expected", files);
+////        assertListSize(files, numberOfBuckets);
+//        assertTrue(((String)fileItem.get("fileName")).startsWith((String) body.get("prefix")));
+//
+//    }
+//
 
 
     /**

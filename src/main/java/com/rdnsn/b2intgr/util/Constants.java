@@ -4,6 +4,13 @@ import com.google.common.net.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 
 public interface Constants {
+
+	public static final long KILOBYTE = 1024;
+	public static final long KILOBYTE_ON_DISK = 1000;
+
+	public static final long GIG_ON_DISK = KILOBYTE_ON_DISK^3;
+	public static final long GIG = KILOBYTE^3;
+
 	public String UTF_8 = StandardCharsets.UTF_8.name();
 	public String AUTHORIZATION = HttpHeaders.AUTHORIZATION;
 

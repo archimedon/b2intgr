@@ -145,14 +145,7 @@ public class UploadProcessor extends BaseProcessor {
 	}
 
     public <T> T coerceClass(Message rsrcIn, Class<T> type) {
-        T obj = null;
-        try {
-            String string = rsrcIn.getBody(String.class);
-            obj = objectMapper.readValue(string, type);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return obj;
+		return JsonHelper.coerceClass(objectMapper, rsrcIn, type);
     }
 
     private Map<String, Object> buildParams(UserFile userFile, String authtoken) {

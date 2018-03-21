@@ -1001,40 +1001,39 @@ public class ZRouteBuilder extends RouteBuilder {
 
             log.debug(userFile.toString());
 
-            int minsize = authAgent.getAuthResponse().getMinimumPartSize();
-            int maxMemSize =  10 * (int) Constants.KILOBYTE_ON_DISK;
+            // TODO: 3/21/18 Replace with b2 suggested partsize
+//            int maxMemSize = authAgent.getAuthResponse().getMinimumPartSize();
+            int maxMemSize = 10 * (int) Constants.KILOBYTE_ON_DISK;
 
             Path path = Paths.get(userFile.getFilepath());
-            File file = path.toFile();
 
-            long fsize = file.length();
+            long fsize = path.toFile().length();
 
             int chunkSize = (fsize < maxMemSize) ? (int) fsize : maxMemSize;
-            int numParts = (int) (fsize/chunkSize);
-            int lastSize = (int) (fsize % chunkSize);
-            final ArrayList<FilePart> parts = new ArrayList<FilePart>(numParts);
+
+            final ArrayList<FilePart> parts = new ArrayList<FilePart>((int) fsize/chunkSize);
             final FileChannel fileChannel;
+
+            long start = 0;
+            int partNo = 1;
+
             try {
                 fileChannel = FileChannel.open(path);
 
-                for (int i =0; i < numParts - 1; i++) {
+                for ( long remaining = fsize; remaining > 0; start = chunkSize * partNo++  ) {
 
-                    long start = i * chunkSize;
-                    int bufsize = chunkSize;
+                    if ( remaining < chunkSize) chunkSize = (int) remaining;
 
-                    if (i > 0 && i == numParts - 1) {
-                        bufsize = lastSize;
-                    }
+                    remaining -= chunkSize;
 
-                    System.err.println("start: " + start + ", bufsize: " + bufsize + ", i: " + i);
-                    parts.add(new FilePart( fileChannel, start, bufsize, i + 1 ));
+                    System.err.println("start: " + start + ", chunkSize: " + chunkSize + ", partNo: " + partNo);
+                    parts.add(new FilePart( fileChannel, start, chunkSize, partNo ));
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
             System.err.println("parts: " + parts);
-//            exchange.getOut().setHeader("numParts", numParts);
-            exchange.getIn().setHeader("numParts", numParts);
+            exchange.getIn().setHeader("numParts", partNo - 1);
             return (T) parts;
         }
     }

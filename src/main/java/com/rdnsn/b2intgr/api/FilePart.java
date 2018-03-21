@@ -1,20 +1,42 @@
 package com.rdnsn.b2intgr.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
-public class FilePart {
+import static com.rdnsn.b2intgr.util.JsonHelper.sha1;
 
+@SuppressWarnings("deprecation")
+@JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class FilePart  implements Comparable<FilePart> {
+
+    @JsonIgnore
     private ByteBuffer data;
+
+    @JsonProperty
     private long start;
+
 //    private int bufSize;
+
+    @JsonProperty
     private boolean unread = true;
+
+    @JsonIgnore
     private FileChannel fileChannel;
 
     //X-Bz-Part-Number
     // A number from 1 to 10000.
     // The parts uploaded for one file must have contiguous numbers, starting with 1.
+    @JsonProperty
     private int partNumber;
 
     // Content-Length
@@ -23,18 +45,23 @@ public class FilePart {
     // The minimum size of every part but the last one is 5MB.
     // When sending the SHA1 checksum at the end, the Content-Length should be
     // set to the size of the file plus the 40 bytes of hex checksum.
+    @JsonProperty
     private long contentLength;
 
     // The SHA1 checksum of the this part of the file. B2 will check this when the part is uploaded, to make sure that the data arrived correctly.
     // The same SHA1 checksum must be passed to b2_finish_large_file.
     // X-Bz-Content-Sha1
+    @JsonProperty
     private String contentSha1;
 
     //  Authorization -   An upload authorization token, from b2_get_upload_part_url. The token must have the writeFiles capability.
+    @JsonProperty
     private String authorizationToken;
 
+    @JsonProperty
     private String fileId;
 
+    @JsonProperty
     private String uploadUrl;
 
     public FilePart() {
@@ -45,9 +72,11 @@ public class FilePart {
         this();
         this.data = ByteBuffer.allocate(bufSize);
         this.setFileChannel(fileChannel);
-//        this.setBufSize(bufSize);
         this.setStart(start);
         this.setPartNumber(partNo);
+
+        // reset after readstream()
+        this.setContentLength(bufSize);
     }
 
     public ByteBuffer getData() throws IOException {
@@ -59,18 +88,8 @@ public class FilePart {
         return data;
     }
 
-    public FilePart setData(ByteBuffer data) {
-        this.data = data;
-        return this;
-    }
-
-    public boolean isUnread() {
+    private boolean isUnread() {
         return unread;
-    }
-
-    public FilePart setUnread(boolean unread) {
-        this.unread = unread;
-        return this;
     }
 
     public FileChannel getFileChannel() {
@@ -95,16 +114,24 @@ public class FilePart {
         return contentLength;
     }
 
-    public FilePart setContentLength(long contentLength) {
+    private FilePart setContentLength(long contentLength) {
         this.contentLength = contentLength;
         return this;
     }
 
     public String getContentSha1() {
+        if (StringUtils.isEmpty(contentSha1)) {
+            try {
+                contentSha1 = sha1(this.getData());
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
         return contentSha1;
     }
 
-    public FilePart setContentSha1(String contentSha1) {
+    private FilePart setContentSha1(String contentSha1) {
         this.contentSha1 = contentSha1;
         return this;
     }
@@ -148,6 +175,15 @@ public class FilePart {
     public FilePart setStart(long start) {
         this.start = start;
         return this;
+    }
+    @Override
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
+    }
+
+    @Override
+    public int compareTo(FilePart other) {
+        return Integer.compare(this.partNumber, other.getPartNumber());
     }
 
 //    public int getBufSize() {

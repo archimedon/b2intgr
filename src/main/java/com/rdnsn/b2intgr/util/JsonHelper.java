@@ -25,6 +25,19 @@ public class JsonHelper {
         return obj;
     }
 
+
+    public static <T> T coerceClass(final ObjectMapper objectMapper, final String string, Class<T> type) {
+        T obj = null;
+        try {
+            obj = objectMapper.readValue(string, type);
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.err.println("err parsing: " + string);
+            throw new RuntimeException(e.getCause());
+        }
+        return obj;
+    }
+
     public static String objectToString(final ObjectMapper objectMapper, final Object t) {
         String string = null;
         try {

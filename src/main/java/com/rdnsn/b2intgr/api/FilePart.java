@@ -20,6 +20,9 @@ import static com.rdnsn.b2intgr.util.JsonHelper.sha1;
 public class FilePart  implements Comparable<FilePart> {
 
     @JsonIgnore
+    private ErrorObject error;
+
+    @JsonIgnore
     private ByteBuffer data;
 
     @JsonProperty
@@ -88,7 +91,7 @@ public class FilePart  implements Comparable<FilePart> {
         return data;
     }
 
-    private boolean isUnread() {
+    public boolean isUnread() {
         return unread;
     }
 
@@ -142,6 +145,15 @@ public class FilePart  implements Comparable<FilePart> {
 
     public FilePart setAuthorizationToken(String authorizationToken) {
         this.authorizationToken = authorizationToken;
+        return this;
+    }
+
+    public ErrorObject getError() {
+        return error;
+    }
+
+    public FilePart setError(ErrorObject error) {
+        this.error = error;
         return this;
     }
 

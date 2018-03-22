@@ -246,12 +246,14 @@ public class ZRouteBuilder extends RouteBuilder {
 
         from("vm:sub")
                 .choice()
-                .when(new FileSizePredicate(1 * Constants.KILOBYTE_ON_DISK) )
+                .when(new FileSizePredicate(authAgent.getAuthResponse().getRecommendedPartSize()) )
                     .to("direct:b2send_large")
                 .otherwise()
                     .threads(serviceConfig.getPoolSize(), serviceConfig.getMaxPoolSize())
                     .to("direct:b2send")
                 .endChoice()
+                //                .delay(500)
+                .process(new PersistMapping())
                 .end();
 
         from("direct:b2send_large").routeId("atomic_large_upload")
@@ -534,29 +536,26 @@ public class ZRouteBuilder extends RouteBuilder {
 
                         Integer code = uploaderOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
                         log.info("uploaderOut RESPONSE_CODE:{ '{}' finishUpload: '{}'}", code, parts.get(0).getFileId());
-
                         if (code != null && HttpStatus.SC_OK == code) {
                             try {
-                                Map<String, Object> finishUploadResponse  = JsonHelper.coerceClass(objectMapper, uploaderOut, HashMap.class);
+                                UploadFileResponse finishUploadResponse = JsonHelper.coerceClass(objectMapper, uploaderOut, UploadFileResponse.class);
                                 exchange.getOut().copyFromWithNewBody(exchange.getIn(), finishUploadResponse);
                             } catch (Exception e) {
                                 throw new UploadException(e);
                             }
                         } else {
                             ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, uploaderOut, ErrorObject.class);
+                            exchange.getOut().copyFromWithNewBody(uploaderOut, errorObject);
                             log.error("errorObject: {} ", errorObject);
                             throw new UploadException("Response code fail (" + code + ") finishUploadBody '" + finishUploadBody + "' not uploaded");
                         }
-
                     }
-                } )
+                })
         .end();
 
         from("direct:b2send").routeId("atomic_upload")
                 .errorHandler(noErrorHandler())
                 .process(new UploadProcessor(serviceConfig, objectMapper))
-//                .delay(500)
-                .process(new PersistMapping())
                 .end();
 
         from("direct:list_buckets")
@@ -895,30 +894,6 @@ public class ZRouteBuilder extends RouteBuilder {
                 .to("direct:rest.bchmod");
 
 
-        /**
-         * TODO: 2/10/18 -
-         *  b2_start_large_file
-         *  b2_get_upload_part_url
-         *  b2_finish_large_file
-         *
-         FILE_NAME='bigfile.dat'
-         FILE_SIZE=`stat -s $FILE_NAME | awk '{print $'8'}' | sed 's/st_size=\([0-9]*\)/\1/g'`
-
-         # Prepare the large file be spliting it into chunks
-         split -b 100000000 $FILE_NAME bz_chunk_
-         FILE_CHUNK_NAMES=(`ls -1 bz_chunk_*`)
-
-         # Upload file
-         UPLOAD_URL=''; # Provided by b2_get_upload_part_url
-         ...
-         */
-
-        // Update a File objectMapper.readValue(
-        // .put("/mod/{filePath}").to("direct:putFile")
-
-        // Get file info
-        //// .get("/file/{filePath}").to("direct:infoFile")
-
     }
 
     private class SaveLocally implements Processor {
@@ -1072,8 +1047,7 @@ public class ZRouteBuilder extends RouteBuilder {
             log.debug(userFile.toString());
 
             // TODO: 3/21/18 Replace with b2 suggested partsize
-//            int maxMemSize = authAgent.getAuthResponse().getMinimumPartSize();
-            int maxMemSize = 10 * (int) Constants.KILOBYTE_ON_DISK;
+            int maxMemSize = authAgent.getAuthResponse().getAbsoluteMinimumPartSize();
 
             Path path = Paths.get(userFile.getFilepath());
 
@@ -1122,7 +1096,6 @@ public class ZRouteBuilder extends RouteBuilder {
         private final long limit;
         public FileSizePredicate() { super(); limit = Constants.GIG_ON_DISK * 5; }
         public FileSizePredicate(long limit) { super(); this.limit = limit; }
-
 
         @Override
         public boolean matches(Exchange exchange) {

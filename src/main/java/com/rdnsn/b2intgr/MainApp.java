@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
+import com.rdnsn.b2intgr.util.Configurator;
 import org.apache.camel.CamelContext;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.util.jndi.JndiContext;
@@ -53,7 +54,7 @@ public class MainApp {
     private static final int ENOTCONN = 107;    /* Transport endpoint is not connected */
     private static final int ETIMEDOUT = 110;   /* Connection timed out */
     private static final int EHOSTDOWN = 112;   /* Host is down */
-    private String configFilePath = "/config.json";
+    private final String configFilePath = "/config.json";
 
     public MainApp(String[] args) throws IOException {
 //        if ( args.length > 1 ) {
@@ -64,7 +65,11 @@ public class MainApp {
         objectMapper.configure(MapperFeature.USE_ANNOTATIONS, true);
         objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
         objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
-        this.serviceConfig = getSettings();
+
+//        this.serviceConfig = getSettings();
+//        String confFile = readStream(getClass().getResourceAsStream(configFilePath));
+
+        this.serviceConfig = new Configurator(objectMapper).getConfiguration();
 
         LOG.debug(serviceConfig.toString());
         // Update Host setting in config if NULL
@@ -134,83 +139,14 @@ public class MainApp {
         camelContext.start();
     }
 
-    private String readStream(InputStream stream) throws IOException {
-        ByteArrayOutputStream into = new ByteArrayOutputStream();
-        byte[] buf = new byte[4096];
-
-        for (int n = -1; 0 < (n = stream.read(buf)); into.write(buf, 0, n)){}
-        into.close();
-        return into.toString();
-    }
-
-    private CloudFSConfiguration getSettings() throws IOException {
-
-        // Load config file
-        String confFile = readStream(getClass().getResourceAsStream(configFilePath));
-
-        // interpolate $vars in config file
-        confFile = injectExtern(confFile);
-
-        CloudFSConfiguration cnfo = objectMapper.readValue(confFile, CloudFSConfiguration.class);
-
-        // Override with specially prefixed environment variables
-        return doEnvironmentOverrides(cnfo, confFile);
-    }
-
-    private List<String> crawl(Map<String, Object> map) {
-        List nkeys = new LinkedList();
-        map.entrySet().forEach( entry -> {
-            if ( entry.getValue() != null && entry.getValue() instanceof Map ) {
-                nkeys.addAll(
-                    crawl((Map<String, Object>)entry.getValue())
-                        .stream().map( innerKey -> entry.getKey() + '.' + innerKey).collect(Collectors.toList()));
-            }
-            else {
-                nkeys.add(entry.getKey());
-            }
-        });
-        return nkeys;
-    }
-
-    private CloudFSConfiguration doEnvironmentOverrides(CloudFSConfiguration confObject, String confFile) throws IOException {
-        Map<String, Object> propValueMap = objectMapper.readValue(confFile, HashMap.class);
-        crawl(propValueMap).forEach( propName -> {
-            String ev = null;
-                // Replace dot with underscore because linux no like dot
-            if ( (ev = System.getenv(ENV_PREFIX + propName.replaceAll("\\.", "_") )) != null
-                || (ev = System.getenv(ENV_PREFIX + propName )) != null) {
-
-                try {
-                    if (propName.indexOf('.') > 0) {
-                        PropertyUtils.setNestedProperty(confObject, propName, ev);
-                    }
-                    else {
-                        BeanUtils.setProperty(confObject, propName, ev);
-                    }
-                    LOG.info("Override config['{}'] with env['{}']", propName , ENV_PREFIX + propName);
-                } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-
-        return confObject;
-    }
-
-    private String injectExtern(String confFile) {
-        Matcher m = Pattern.compile(CONFIG_ENV_PATTERN).matcher(confFile);
-        String tmp = null;
-        while (m.find()) {
-            tmp = System.getenv(m.group(1));
-            if (tmp != null && tmp.length() > 0) {
-                LOG.info("Setting: '{}' from environment", m.group(1));
-                confFile = confFile.replaceAll("\\$" + m.group(1) +"\\b" , tmp);
-//                confFile = m.replaceFirst(tmp);
-//                System.err.println(confFile);
-            }
-        }
-        return confFile;
-    }
+//    private String readStream(InputStream stream) throws IOException {
+//        ByteArrayOutputStream into = new ByteArrayOutputStream();
+//        byte[] buf = new byte[4096];
+//
+//        for (int n = -1; 0 < (n = stream.read(buf)); into.write(buf, 0, n)){}
+//        into.close();
+//        return into.toString();
+//    }
 
     private void writeConnectionString() throws Exception {
         LOG.info("Listening on: " +

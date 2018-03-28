@@ -14,6 +14,9 @@ public class B2SimpleErrorFile extends B2ReadsError implements B2BaseFile {
     protected String fileId;
 
     @JsonProperty
+    protected String bucketId;
+
+    @JsonProperty
     protected String fileName;
 
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
@@ -29,6 +32,16 @@ public class B2SimpleErrorFile extends B2ReadsError implements B2BaseFile {
         this.setFileName(file.getFileName())
             .setFileId(file.getFileId())
             .setDownloadUrl(file.getDownloadUrl());
+    }
+
+    @Override
+    public String getBucketId() {
+        return bucketId;
+    }
+
+    public B2SimpleErrorFile setBucketId(String bucketId) {
+        this.bucketId = bucketId;
+        return this;
     }
 
     public String getFileId() {

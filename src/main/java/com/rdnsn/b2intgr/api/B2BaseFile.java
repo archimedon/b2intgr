@@ -8,6 +8,8 @@ public interface B2BaseFile {
 
     public String getFileId();
 
+    public String getBucketId();
+
     public String getFileName();
 
 }

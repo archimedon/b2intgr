@@ -12,6 +12,9 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 public class B2SimpleFile implements B2BaseFile {
 
     @JsonProperty
+    protected String bucketId;
+
+    @JsonProperty
     protected String fileId;
 
     @JsonProperty
@@ -30,6 +33,16 @@ public class B2SimpleFile implements B2BaseFile {
         this.setFileName(file.getFileName())
             .setFileId(file.getFileId())
             .setDownloadUrl(file.getDownloadUrl());
+    }
+
+    @Override
+    public String getBucketId() {
+        return bucketId;
+    }
+
+    public B2SimpleFile setBucketId(String bucketId) {
+        this.bucketId = bucketId;
+        return this;
     }
 
     public String getFileId() {

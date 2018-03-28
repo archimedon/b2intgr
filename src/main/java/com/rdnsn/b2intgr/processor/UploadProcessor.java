@@ -115,6 +115,9 @@ public class UploadProcessor extends BaseProcessor {
 			log.info("Completed: '{}'", downloadUrl);
 
             UploadFileResponse uploadResponse = coerceClass(responseOut, UploadFileResponse.class);
+
+            log.debug("uploadResponse: {}", uploadResponse);
+
             uploadResponse.setDownloadUrl(downloadUrl);
             exchange.getOut().copyFromWithNewBody(responseOut, uploadResponse);
             exchange.getOut().setHeader(Constants.USER_FILE, userFile);

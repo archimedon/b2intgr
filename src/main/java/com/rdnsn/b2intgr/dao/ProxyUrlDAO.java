@@ -96,6 +96,8 @@ public class ProxyUrlDAO implements AutoCloseable {
                                 " RETURN id(p)";
 
 
+                        LOG.debug("valMap: {}", valMap);
+
                         result = tx.run(
                                 updateCypher,
                                 // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
@@ -142,6 +144,39 @@ public class ProxyUrlDAO implements AutoCloseable {
         }
     }
 
+
+    public Integer deleteMapping(final ProxyUrl proxyUrl) {
+        try (Session session = getSession()) {
+            Integer resData = session.writeTransaction((Transaction tx) -> {
+
+                LOG.debug("proxyUrl.getProxy(): {} ", proxyUrl.getProxy());
+                LOG.debug("proxyUrl.getFileId(): {} ", proxyUrl.getFileId());
+
+                StatementResult result = tx.run("MATCH (p:ProxyUrl) WHERE " +
+                                "p.proxy = $purl AND " +
+                                "p.fileId = $fileId " +
+                                "DELETE p",
+                        parameters(
+                        "purl", proxyUrl.getProxy(),
+                            "fileId", proxyUrl.getFileId()
+                        ));
+
+                Integer found = null;
+                if (result.hasNext()) {
+
+                    Record res = result.single();
+                    found = res.size() > 0 ? res.get(0).asInt() : null;
+
+                    LOG.debug("found: '{}'", found);
+
+                }
+                return found;
+            });
+            return resData;
+        }
+
+
+    }
 
     public ProxyUrl getProxyUrl(final ProxyUrl proxyUrl) {
 
@@ -200,4 +235,5 @@ public class ProxyUrlDAO implements AutoCloseable {
     synchronized private Session getSession() {
         return driver.session();
     }
+
 }

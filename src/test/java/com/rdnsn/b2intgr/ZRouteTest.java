@@ -1,5 +1,7 @@
 package com.rdnsn.b2intgr;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.rdnsn.b2intgr.api.AuthResponse;
@@ -8,6 +10,7 @@ import com.rdnsn.b2intgr.api.UploadFileResponse;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
+import com.rdnsn.b2intgr.util.Configurator;
 import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.util.JsonHelper;
 import org.apache.camel.Exchange;
@@ -63,6 +66,7 @@ public class ZRouteTest extends CamelTestSupport {
     public static URI RESTAPI_ENDPOINT;
     private static ObjectMapper objectMapper;
     private static CloudFSConfiguration serviceConfig;
+    private final String configFilePath = "/config.json";
 
     private int numberOfBuckets = 2;
 
@@ -83,8 +87,18 @@ public class ZRouteTest extends CamelTestSupport {
 
     @Override
     public void doPreSetup() throws Exception {
-        objectMapper = new ObjectMapper();
-        serviceConfig = getSettings();
+        this.objectMapper = new ObjectMapper();
+        objectMapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        objectMapper.configure(MapperFeature.USE_ANNOTATIONS, true);
+        objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+        objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+
+//        this.serviceConfig = getSettings();
+        String confFile = readStream(getClass().getResourceAsStream(configFilePath));
+
+        this.serviceConfig = new Configurator(objectMapper).getConfiguration(confFile);
+
+        LOG.debug(serviceConfig.toString());
         // Override DocRoot for tests
         serviceConfig.setDocRoot(getClass().getResource("/").getPath());
         // scheme, null, host, -1, path, null, fragment
@@ -338,66 +352,5 @@ public class ZRouteTest extends CamelTestSupport {
         for (int n = -1; 0 < (n = stream.read(buf)); into.write(buf, 0, n)){}
         into.close();
         return into.toString();
-    }
-
-    private CloudFSConfiguration getSettings() throws IOException {
-
-        // Load config file
-        String confFile = readStream(getClass().getResourceAsStream("/config.json"));
-
-        // interpolate $vars in config file
-        confFile = injectExtern(confFile);
-
-        // Override with specially prefixed environment variables
-        return doEnvironmentOverrides(objectMapper.readValue(confFile, CloudFSConfiguration.class), confFile);
-    }
-
-    private List<String> crawl(Map<String, Object> map) {
-        List nkeys = new LinkedList();
-        map.entrySet().forEach( entry -> {
-            if ( entry.getValue() != null && entry.getValue() instanceof Map ) {
-                nkeys.addAll(
-                    crawl((Map<String, Object>)entry.getValue())
-                        .stream().map( innerKey -> entry.getKey() + '.' + innerKey).collect(Collectors.toList()));
-            }
-            else {
-                nkeys.add(entry.getKey());
-            }
-        });
-        return nkeys;
-    }
-
-    private CloudFSConfiguration doEnvironmentOverrides(CloudFSConfiguration confObject, String confFile) throws IOException {
-        Map<String, Object> propValueMap = objectMapper.readValue(confFile, HashMap.class);
-        crawl(propValueMap).forEach( propName -> {
-            String ev = null;
-
-            if ( (ev = System.getenv(ENV_PREFIX + propName )) != null) {
-                try {
-                    if (propName.indexOf('_') > 0) {
-                        PropertyUtils.setNestedProperty(confObject, propName.replaceAll("_", "."), ev);
-                    }
-                    else {
-                        BeanUtils.setProperty(confObject, propName, ev);
-                    }
-                    System.err.format("Override config['%s'] with env['%s']%n", propName , ENV_PREFIX + propName);
-                } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        return confObject;
-    }
-
-    private String injectExtern(String confFile) {
-        Matcher m = Pattern.compile(CONFIG_ENV_PATTERN).matcher(confFile);
-        String tmp = null;
-        while (m.find()) {
-            tmp = System.getenv(m.group(1));
-            if (tmp != null && tmp.length() > 0) {
-                confFile = m.replaceAll(tmp);
-            }
-        }
-        return confFile;
     }
 }

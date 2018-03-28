@@ -43,6 +43,9 @@ public class ProxyUrl {
     @JsonProperty
     private Long size;
 
+    @JsonProperty
+    private String fileId;
+
     // The ID from Neo but, not reliable longterm
     @JsonIgnore
     private transient Long transientId;
@@ -104,6 +107,15 @@ public class ProxyUrl {
 
     public ProxyUrl setContentType(String contentType) {
         this.contentType = contentType;
+        return this;
+    }
+
+    public String getFileId() {
+        return fileId;
+    }
+
+    public ProxyUrl setFileId(String fileId) {
+        this.fileId = fileId;
         return this;
     }
 

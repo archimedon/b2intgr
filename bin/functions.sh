@@ -2,7 +2,6 @@
 
 
 JAVA_CMD="`which java` -jar"
-NODE_CMD="`which node`"
 
 QUEUE_PORT=${Q_PORT:-8080}
 WEB_PORT=${PORT:-80}
@@ -44,9 +43,29 @@ get_target_name () {
 
 function start_node {
 
+    DIRP=0
+    NODE_CMD="`which npm`"
 
- $NODE_CMD >/dev/null &
- let PID=$!
+    if [ -z "NODE_CMD" ]; then
+        echo STDERR "[WARN] 'npm' command not found"
+        NODE_CMD="`which node`"
+    fi
+
+    if [ -z "NODE_CMD" ]; then
+        echo STDERR "[ERROR] 'node' command not found"
+    fi
+
+    if [ ! -z "NODE_CMD" ]; then
+        if [ -z "$1" ]; then
+            cd $1
+            DIRP=1
+        fi
+        $NODE_CMD 1>&2 &
+        let PID=$!
+        echo -n $PID > $NODE_PIDFILE
+        [ $DIRP -eq 1 ] && cd -
+    fi
+
 # echo "$PID" >&2
 #    if nc -z localhost $WEB_PORT; then
 #      echo  port $WEB_PORT is not free! >&2

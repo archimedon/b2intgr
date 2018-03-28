@@ -16,12 +16,14 @@ import java.util.regex.Pattern;
 
 import javax.validation.constraints.NotNull;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-@JsonSerialize()
+@JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
 public class RemoteStorageConfiguration {
 
 	@NotNull
@@ -93,5 +95,9 @@ public class RemoteStorageConfiguration {
 	public String getBucketId() {
 		return this.bucket.get("bucketId");
 	}
-	
+
+	public String toString() {
+		return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
+	}
+
 }

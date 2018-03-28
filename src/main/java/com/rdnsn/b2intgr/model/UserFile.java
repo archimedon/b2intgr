@@ -16,6 +16,8 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.ImmutableMap;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
+import static com.rdnsn.b2intgr.util.JsonHelper.sha1;
+
 @SuppressWarnings("deprecation")
 @JsonSerialize(include = JsonSerialize.Inclusion.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -60,19 +62,19 @@ public class UserFile implements Comparable<UserFile>, java.io.Serializable {
     public UserFile(File file) {
         this();
         this.setFilepath(file.getAbsolutePath());
-        this.sha1 = UploadProcessor.sha1(file);
+        this.sha1 = sha1(file);
     }
 
     public UserFile(Path filePath) {
         this();
         this.setFilepath(filePath.toString());
-        this.sha1 = UploadProcessor.sha1(filePath.toFile());
+        this.sha1 = sha1(filePath.toFile());
     }
 
     public UserFile(String filepath) {
         this();
         this.setFilepath(filepath);
-        this.sha1 = UploadProcessor.sha1(new File(filepath));
+        this.sha1 = sha1(new File(filepath));
     }
 
     public String getAuthor() {

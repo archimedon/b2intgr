@@ -3,6 +3,8 @@ package com.rdnsn.b2intgr.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.camel.Message;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -11,6 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
 
 public class JsonHelper {
+    private static final Logger LOG = LoggerFactory.getLogger(JsonHelper.class);
 
     public static <T> T coerceClass(final ObjectMapper objectMapper, final Message rsrcIn, Class<T> type) {
         T obj = null;
@@ -18,8 +21,7 @@ public class JsonHelper {
         try {
             obj = objectMapper.readValue(string, type);
         } catch (IOException e) {
-            e.printStackTrace();
-            System.err.println("err parsing: " + string);
+            LOG.error("Error parsing: '" + string + "'", e);
             throw new RuntimeException(e.getCause());
         }
         return obj;
@@ -31,8 +33,7 @@ public class JsonHelper {
         try {
             obj = objectMapper.readValue(string, type);
         } catch (IOException e) {
-            e.printStackTrace();
-            System.err.println("err parsing: " + string);
+            LOG.error("Error parsing: '" + string + "'", e);
             throw new RuntimeException(e.getCause());
         }
         return obj;
@@ -43,7 +44,7 @@ public class JsonHelper {
         try {
             string = objectMapper.writeValueAsString(t);
         } catch (JsonProcessingException e) {
-            System.err.println("err parsing: " + string);
+            LOG.error("Error parsing: '" + string + "'", e);
             throw new RuntimeException(e.getCause());
         }
         return string;

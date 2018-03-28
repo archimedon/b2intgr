@@ -1,5 +1,7 @@
 package com.rdnsn.b2intgr;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.processor.AuthAgent;
@@ -11,6 +13,8 @@ import org.apache.commons.beanutils.BeanUtils;
 import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.lang.StringUtils;
 import org.neo4j.driver.v1.exceptions.ServiceUnavailableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -29,6 +33,7 @@ import java.util.stream.Collectors;
  * Initialize and start the camel routes
  */
 public class MainApp {
+    private static final Logger LOG = LoggerFactory.getLogger(MainApp.class);
 
     private static final String ENV_PREFIX = "B2I_";
     private static final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";
@@ -48,11 +53,20 @@ public class MainApp {
     private static final int ENOTCONN = 107;    /* Transport endpoint is not connected */
     private static final int ETIMEDOUT = 110;   /* Connection timed out */
     private static final int EHOSTDOWN = 112;   /* Host is down */
+    private String configFilePath = "/config.json";
 
     public MainApp(String[] args) throws IOException {
+//        if ( args.length > 1 ) {
+//            configFilePath = "/" + args[0];
+//        }
         this.objectMapper = new ObjectMapper();
+        objectMapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
+        objectMapper.configure(MapperFeature.USE_ANNOTATIONS, true);
+        objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+        objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
         this.serviceConfig = getSettings();
 
+        LOG.debug(serviceConfig.toString());
         // Update Host setting in config if NULL
         serviceConfig.setHost(StringUtils.isEmpty(serviceConfig.getHost())
             ? InetAddress.getLocalHost().getHostAddress()
@@ -74,14 +88,14 @@ public class MainApp {
         File f = new File(serviceConfig.getDocRoot());
         if (!f.exists()) {
             if (f.mkdirs()){
-                System.err.println("Made DocRoot directory " + f.getPath());
+                LOG.info("Made DocRoot directory '{}'", f.getPath());
                 return true;
             }
             else {
                 throw new RuntimeException("Make DocRoot directory failed: " + f.getPath());
             }
         } else {
-            System.err.println("DocRoot directory exists: " + f.getPath());
+            LOG.info("DocRoot directory exists: '{}'", f.getPath());
             return true;
         }
     }
@@ -132,13 +146,15 @@ public class MainApp {
     private CloudFSConfiguration getSettings() throws IOException {
 
         // Load config file
-        String confFile = readStream(getClass().getResourceAsStream("/config.json"));
+        String confFile = readStream(getClass().getResourceAsStream(configFilePath));
 
         // interpolate $vars in config file
         confFile = injectExtern(confFile);
 
+        CloudFSConfiguration cnfo = objectMapper.readValue(confFile, CloudFSConfiguration.class);
+
         // Override with specially prefixed environment variables
-        return doEnvironmentOverrides(objectMapper.readValue(confFile, CloudFSConfiguration.class), confFile);
+        return doEnvironmentOverrides(cnfo, confFile);
     }
 
     private List<String> crawl(Map<String, Object> map) {
@@ -171,7 +187,7 @@ public class MainApp {
                     else {
                         BeanUtils.setProperty(confObject, propName, ev);
                     }
-                    System.err.format("Override config['%s'] with env['%s']%n", propName , ENV_PREFIX + propName);
+                    LOG.info("Override config['{}'] with env['{}']", propName , ENV_PREFIX + propName);
                 } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
                     e.printStackTrace();
                 }
@@ -187,14 +203,17 @@ public class MainApp {
         while (m.find()) {
             tmp = System.getenv(m.group(1));
             if (tmp != null && tmp.length() > 0) {
-                confFile = m.replaceAll(tmp);
+                LOG.info("Setting: '{}' from environment", m.group(1));
+                confFile = confFile.replaceAll("\\$" + m.group(1) +"\\b" , tmp);
+//                confFile = m.replaceFirst(tmp);
+//                System.err.println(confFile);
             }
         }
         return confFile;
     }
 
     private void writeConnectionString() throws Exception {
-        System.err.println("Listening on: " +
+        LOG.info("Listening on: " +
             new URL("http", serviceConfig.getHost(), serviceConfig.getPort(), serviceConfig.getContextUri())
         );
     }

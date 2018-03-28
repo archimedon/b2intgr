@@ -1,10 +1,7 @@
-package com.rdnsn.b2intgr.processor;
+package com.rdnsn.b2intgr.exception;
 
 public class UploadException extends Exception {
 
-	/**
-	 * 
-	 */
 	private static final long serialVersionUID = 6121599403776306084L;
 
 	public UploadException() {
@@ -15,7 +12,6 @@ public class UploadException extends Exception {
 		super(message);
 	}
 
-	
 	public UploadException(Exception e) {
 		super(e);
 	}

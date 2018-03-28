@@ -17,7 +17,11 @@ if [ -z $APP_HOME ]; then
 fi
 
 JTARGET="${APP_HOME}/${JAR_FILE}"
-NODE_CMD="$NODE_CMD ${APP_HOME}/index.js"
+APP_HOME=./
+NODE_HOME=$(find "${APP_HOME}" -name package\.json -type f)
+
+if [ $? -eq 0 ]; then
+
 
 if [ ! -f "$JTARGET" ]; then
     mvn clean compile package >/dev/null 2>&1
@@ -36,19 +40,21 @@ ZQUEUE_PIDFILE="${RUN_DIR}/zqueue.pid"
 NODE_PIDFILE="${RUN_DIR}/node.pid"
 
 
-echo  "APP_HOME: ${APP_HOME}, ZQUEUE_PIDFILE: ${ZQUEUE_PIDFILE}, \
-RUN_DIR Directory: ${RUN_DIR}, NODE_CMD: ${NODE_CMD}, JTARGET: ${JTARGET}" >&2
+#echo  "APP_HOME: ${APP_HOME}, ZQUEUE_PIDFILE: ${ZQUEUE_PIDFILE}, \
+# RUN_DIR Directory: ${RUN_DIR}, NODE_CMD: ${NODE_CMD}, JTARGET: ${JTARGET}" >&2
 
 # Clear user defined CLASSPATH
 # CLASSPATH=
 
 
 if [ "$1" = "start" ]; then
-    $(start_node) && $(start_zqueue) >/dev/null 2>&1
-elif [ "$1" = "stop" ]; then
-let SLEEP=2
 
-  stop_zqueue
+    $(start_node) && $(start_zqueue) >/dev/null 2>&1
+
+elif [ "$1" = "stop" ]; then
+
+    let SLEEP=2
+    stop_zqueue
 fi
 
 

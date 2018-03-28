@@ -11,9 +11,9 @@
   "poolSize": 5,
   "maxPoolSize": 10,
   "neo4jConf": {
-    "urlString": "bolt://localhost:7687",
-    "username": "neo4j",
-    "password": "reggae"
+    "urlString": "$GRAPHENEDB_BOLT_URL",
+    "username": "$GRAPHENEDB_BOLT_USER",
+    "password": "$GRAPHENEDB_BOLT_PASSWORD"
   },
   "mailConfig": {
     "host": "smtp.gmail.com",

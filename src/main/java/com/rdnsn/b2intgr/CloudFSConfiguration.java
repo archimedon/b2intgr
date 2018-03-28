@@ -7,12 +7,14 @@ import java.util.Map;
 
 import javax.validation.constraints.NotNull;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-@JsonSerialize()
+@JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
 public class CloudFSConfiguration {
 
     /**
@@ -36,7 +38,7 @@ public class CloudFSConfiguration {
 
     @NotNull
     @JsonProperty
-    private String contextUri = "cloudfs/api/v1";
+    private String contextUri;
 
     @NotNull
     @JsonProperty
@@ -211,4 +213,8 @@ public class CloudFSConfiguration {
         return Base64.getEncoder()
                 .encodeToString((getRemoteAccountId() + ":" + getRemoteApplicationKey()).getBytes());
     }
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
+    }
+
 }

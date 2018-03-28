@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.rdnsn.b2intgr.api.AuthResponse;
 import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
+import com.rdnsn.b2intgr.api.UploadFileResponse;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
@@ -30,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -49,44 +51,49 @@ public class ZRouteTest extends CamelTestSupport {
 
     private static final String ENV_PREFIX = "B2I_";
     private static final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";
-    private static final long TTL = (12 * 60 * 60) - 10;
+    private static final String LIST_VERSIONS_URI = "/lsvers";
+    private static final String LIST_BUCKETS_URI = "/list";
 
-    private static long lastmod = 0;
+    private static final int ENOENT = 2;        /* No such file or directory */
+
 
     private static AuthAgent authAgent;
     private static GetUploadUrlResponse getUploadUrlResponse;
 
-    public static URL RESTAPI_HOST;
-    public static URL RESTAPI_ENDPOINT;
+    public static URI RESTAPI_ENDPOINT;
     private static ObjectMapper objectMapper;
     private static CloudFSConfiguration serviceConfig;
-    private ZRouteBuilder zroute;
-//    private CamelContext camelContext;
-
-    private String bucketId ="2ab327a44f788e635ef20613";
-
-
-    private static final int ENOENT = 2;        /* No such file or directory */
-    private static final int EACCES = 13;       /* Permission denied */
-    private static final int EFAULT = 14;       /* Bad address */
-    private static final int EBUSY = 16;        /* Device or resource busy */
-    private static final int ENOTCONN = 107;    /* Transport endpoint is not connected */
-    private static final int ETIMEDOUT = 110;   /* Connection timed out */
-    private static final int EHOSTDOWN = 112;   /* Host is down */
-
-//    @EndpointInject(uri = "mock:result")
-//    MockEndpoint resultEndpoint;
-
 
     private int numberOfBuckets = 2;
-    private static final String ENDPOINT_URI = "http4://localhost:8080/cloudfs/api/v1";
-    private static final String LIST_VERSIONS_URI = ENDPOINT_URI + "/lsvers";
-    private static final String LISTBUCKETS_VERSIONS_URI = ENDPOINT_URI + "/list";
 
     public ZRouteTest() throws Exception {
         super();
 //        setUseRouteBuilder(false);
 //        System.setProperty("skipStartingCamelContext", "true");
+    }
+
+    @Override
+    public RouteBuilder createRouteBuilder() throws Exception
+    {
+//        zRouteBuilder = new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
+        LOG.info("Create RouteBuilder");
+        return new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
+
+    }
+
+    @Override
+    public void doPreSetup() throws Exception {
+        objectMapper = new ObjectMapper();
+        serviceConfig = getSettings();
+        // Override DocRoot for tests
+        serviceConfig.setDocRoot(getClass().getResource("/").getPath());
+        // scheme, null, host, -1, path, null, fragment
+        // String scheme, String userInfo, String host, int port, String path, String query, String fragment)
+        RESTAPI_ENDPOINT = new URI(serviceConfig.getProtocol(), null, serviceConfig.getHost(), serviceConfig.getPort(), serviceConfig.getContextUri(), null, null);
+
+        if (! setupWorkDirectory()) {
+            System.exit(ENOENT);
+        }
     }
 
     @Override
@@ -100,11 +107,24 @@ public class ZRouteTest extends CamelTestSupport {
         return jndiContext;
     }
 
-    @Override
-    public RouteBuilder createRouteBuilder() throws Exception
-    {
-        LOG.info("Create RouteBuilder");
-        return new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
+    /**
+     *
+     */
+    @Test
+    public void test0BackBlazeConnect() {
+        assertNotNull("authAgent", authAgent);
+        assertNotNull("authResponse", authAgent.getAuthResponse());
+        assertNotNull("authResponse token", authAgent.getAuthResponse().getAuthorizationToken());
+    }
+
+    /**
+     *
+     */
+    @Test
+    public void test1DBConnection() {
+        ProxyUrlDAO purl = new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper);
+        boolean ans = purl.isAlive();
+        assertTrue("Connection to Neo4j Failed", ans);
     }
 
     /*
@@ -122,13 +142,12 @@ public class ZRouteTest extends CamelTestSupport {
             "uploadTimestamp": 1518602570000
         }, ...
     }
-
      */
     @Test
     public void testListVersions() throws Exception {
 
         final Map<String, Object> body = ImmutableMap.of(
-                "bucketId", bucketId,
+                "bucketId", serviceConfig.getRemoteBucketId(),
                 "startFileName" , "",
                 "prefix" , "hh/site/images/v2/",
                 "delimiter" , "/",
@@ -136,9 +155,8 @@ public class ZRouteTest extends CamelTestSupport {
         );
 
         final String token = authAgent.getAuthResponse().getAuthorizationToken();
-        LOG.error("Token: {}", token);
 
-        final Message responseOut = template.send(LIST_VERSIONS_URI, (exchange) -> {
+        final Message responseOut = template.send(getHttp4Proto(RESTAPI_ENDPOINT + LIST_VERSIONS_URI), (exchange) -> {
 
             // Ensure Empty
             exchange.getIn().removeHeaders("*");
@@ -151,13 +169,10 @@ public class ZRouteTest extends CamelTestSupport {
 
         }).getOut();
 
-        LOG.debug("Headers: {}",
-            responseOut.getHeaders().entrySet().stream().map( entry -> String.format("name: %s%nvalue: %s", entry.getKey(), "" + entry.getValue())).collect(Collectors.toList()));
-
         Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
-        assertNotNull("code expected", code);
-        assertEquals(HttpStatus.SC_OK, code.longValue());
+        assertNotNull("An HttpStatus is expected", code);
+        assertEquals("HttpStatus 200 expected",HttpStatus.SC_OK, code.longValue());
 
         Map<String, List<Map<String, Object>>> filesWrap = JsonHelper.coerceClass(objectMapper, responseOut, HashMap.class);
         List<Map<String, Object>> files = List.class.cast(filesWrap.get("files"));
@@ -168,27 +183,6 @@ public class ZRouteTest extends CamelTestSupport {
 //        assertListSize(files, numberOfBuckets);
         assertTrue(((String)fileItem.get("fileName")).startsWith((String) body.get("prefix")));
 
-    }
-
-
-    /**
-     *
-     */
-    @Test
-    public void testBackBlazeConnect() {
-        assertNotNull("authAgent", authAgent);
-        assertNotNull("authResponse", authAgent.getAuthResponse());
-    }
-
-    /**
-     *
-     */
-    @Test
-    public void testDBConnection() {
-        ProxyUrlDAO purl = new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper);
-        boolean ans = purl.isAlive();
-        assertTrue("Connection to Neo4j Failed", ans);
-        purl = null;
     }
 
     /**
@@ -212,7 +206,7 @@ public class ZRouteTest extends CamelTestSupport {
     @Test
     public void testListBuckets() throws IOException {
 
-        final Message responseOut = template.send(LISTBUCKETS_VERSIONS_URI, (exchange) -> {
+        final Message responseOut = template.send(getHttp4Proto(RESTAPI_ENDPOINT + LIST_BUCKETS_URI), (exchange) -> {
             // Ensure Empty
             exchange.getIn().removeHeaders("*");
             exchange.getIn().setBody(null);
@@ -231,22 +225,32 @@ public class ZRouteTest extends CamelTestSupport {
     }
 
     @Test
-    public void testUpload() throws IOException {
-        URL oneK = getClass().getResource("/test-samples/1024b-file.txt");
+    public void testUploadSmall() throws IOException {
+        String basePath = getClass().getResource("/test-samples").getPath();
+        Path filePath = Paths.get(basePath, "/small.file");
 
-//      URL sixteenK = getClass().getResource("/test-samples/16K-file.txt");
-//      URL qtrK = getClass().getResource("/test-samples/256b-file.txt");
-//      respURL: 'file:/Users/ronalddennison/eclipse-workspace/b2intgr/target/test-classes/config.json'
+        UploadFileResponse uploadResponse = upload(filePath);
+        assertNotNull("fileId expected", uploadResponse.getFileId());
+        log.info(" uploadResponse: '{}'", uploadResponse);
+    }
 
+    @Test
+    public void testUploadLarge() throws IOException {
+        String basePath = getClass().getResource("/test-samples").getPath();
+        Path filePath = Paths.get(basePath, "/large.file");
 
-        Path fpath = Paths.get(oneK.getPath());
+        UploadFileResponse uploadResponse = upload(filePath);
+        assertNotNull("fileId expected", uploadResponse.getFileId());
+        log.info(" uploadResponse: '{}'", uploadResponse);
+    }
+
+    public UploadFileResponse upload(Path filePath) throws IOException {
+        log.info("sample file: '{}'", filePath.toString());
+
         Path assetPath = Paths.get(serviceConfig.getDocRoot());
-        String relpath = "test/" + assetPath.relativize(fpath).toString();
-        log.info("sample file: '{}'", oneK.getPath());
-        log.info("assetPath: '{}'", assetPath);
-        log.info("'test/' + relpath: '{}'", relpath);
-        log.info("serviceConfig.getDocRoot(): '{}'", serviceConfig.getDocRoot());
-        String SHA1 = JsonHelper.sha1(fpath.toFile());
+        String relpath = assetPath.relativize(filePath).toString();
+
+        String SHA1 = JsonHelper.sha1(filePath.toFile());
 
         final Message responseOut = template.send(getHttp4Proto(getUploadUrlResponse.getUploadUrl())
                 + "?throwExceptionOnFailure=false&okStatusCodeRange=100", (Exchange innerExchg) -> {
@@ -254,13 +258,12 @@ public class ZRouteTest extends CamelTestSupport {
             innerExchg.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
             innerExchg.getIn().setHeader(Constants.X_BZ_FILE_NAME, relpath);
             innerExchg.getIn().setHeader(Constants.X_BZ_CONTENT_SHA1, SHA1);
-            innerExchg.getIn().setHeader(Exchange.CONTENT_LENGTH, fpath.toFile().length());
-            innerExchg.getIn().setHeader(Exchange.CONTENT_TYPE, "text/plain");
-//            innerExchg.getIn().setHeader(Exchange.CONTENT_TYPE, "b2/x-auto");
+            innerExchg.getIn().setHeader(Exchange.CONTENT_LENGTH, filePath.toFile().length());
+//            innerExchg.getIn().setHeader(Exchange.CONTENT_TYPE, "text/plain");
+            innerExchg.getIn().setHeader(Exchange.CONTENT_TYPE, "b2/x-auto");
             innerExchg.getIn().setHeader(Constants.AUTHORIZATION, getUploadUrlResponse.getAuthorizationToken());
             innerExchg.getIn().setHeader(Constants.X_BZ_INFO_AUTHOR, "testCase");
-            innerExchg.getIn().setBody(fpath.toFile());
-
+            innerExchg.getIn().setBody(filePath.toFile());
         }).getOut();
 
         final Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
@@ -268,60 +271,25 @@ public class ZRouteTest extends CamelTestSupport {
         log.info("HTTP_RESPONSE_CODE:{ '{}' XBzFileName: '{}'}", code, relpath);
 
         assertEquals(HttpStatus.SC_OK, responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class).longValue());
-
-        Map<String, List<Map<String, Object>>> uploadResponse = JsonHelper.coerceClass(objectMapper, responseOut, HashMap.class);
-
-/*
-{
-    "fileId" : "4_h4a48fe8875c6214145260818_f000000000000472a_d20140104_m032022_c001_v0000123_t0104",
-    "fileName" : "typing_test.txt",
-    "accountId" : "d522aa47a10f",
-    "bucketId" : "4a48fe8875c6214145260818",
-    "contentLength" : 46,
-    "contentSha1" : "bae5ed658ab3546aee12f23f36392f35dba1ebdd",
-    "contentType" : "text/plain",
-    "fileInfo" : {
-       "author" : "unknown"
-    }
-}
- */
-        log.info(" uploadResponse: '{}'", uploadResponse);
-        assertNotNull("fileId expected", uploadResponse.get("fileId"));
+        return JsonHelper.coerceClass(objectMapper, responseOut, UploadFileResponse.class);
     }
 
     @Test()
     public void testGetUploadUrl() throws IOException {
 
-        final ProducerTemplate producer;
         AuthResponse remoteAuth = ZRouteTest.authAgent.getAuthResponse();
 
         getUploadUrlResponse = objectMapper.readValue(
-                template.send( getHttp4Proto(remoteAuth.resolveGetUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS, (Exchange exchange) -> {
-                    exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-                    exchange.getIn().setHeader(Constants.AUTHORIZATION, remoteAuth.getAuthorizationToken());
-                    exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, ImmutableMap.<String, String>of("bucketId", bucketId)));
-                }).getOut().getBody(String.class),
-                GetUploadUrlResponse.class);
+            template.send( getHttp4Proto(remoteAuth.resolveGetUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS, (Exchange exchange) -> {
+                exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+                exchange.getIn().setHeader(Constants.AUTHORIZATION, remoteAuth.getAuthorizationToken());
+                exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, ImmutableMap.<String, String>of("bucketId", serviceConfig.getRemoteBucketId())));
+            }).getOut().getBody(String.class),
+            GetUploadUrlResponse.class);
 
         assertNotNull("Response expected", getUploadUrlResponse);
         assertNotNull("AuthorizationToken expected", getUploadUrlResponse.getAuthorizationToken());
         assertNotNull("UploadUrl expected", getUploadUrlResponse.getUploadUrl());
-    }
-
-    @Override
-    public void doPreSetup() throws Exception {
-        this.objectMapper = new ObjectMapper();
-        this.serviceConfig = getSettings();
-
-        // Override DocRoot for tests
-        this.serviceConfig.setDocRoot(getClass().getResource("/").getPath());
-
-        this.RESTAPI_HOST = new URL(serviceConfig.getProtocol(), serviceConfig.getHost(), serviceConfig.getPort(), "/");
-        this.RESTAPI_ENDPOINT = new URL(RESTAPI_HOST, serviceConfig.getContextUri());
-
-        if (! setupWorkDirectory()) {
-            System.exit(ENOENT);
-        }
     }
 
 //    @Override
@@ -364,7 +332,6 @@ public class ZRouteTest extends CamelTestSupport {
         }
     }
 
-
     private String readStream(InputStream stream) throws IOException {
         ByteArrayOutputStream into = new ByteArrayOutputStream();
         byte[] buf = new byte[4096];
@@ -402,24 +369,23 @@ public class ZRouteTest extends CamelTestSupport {
 
     private CloudFSConfiguration doEnvironmentOverrides(CloudFSConfiguration confObject, String confFile) throws IOException {
         Map<String, Object> propValueMap = objectMapper.readValue(confFile, HashMap.class);
-        crawl(propValueMap)
-                .forEach( propName -> {
-                    String ev = null;
+        crawl(propValueMap).forEach( propName -> {
+            String ev = null;
 
-                    if ( (ev = System.getenv(ENV_PREFIX + propName )) != null) {
-                        try {
-                            if (propName.indexOf('_') > 0) {
-                                PropertyUtils.setNestedProperty(confObject, propName.replaceAll("_", "."), ev);
-                            }
-                            else {
-                                BeanUtils.setProperty(confObject, propName, ev);
-                            }
-                            System.err.format("Override config['%s'] with env['%s']%n", propName , ENV_PREFIX + propName);
-                        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-                            e.printStackTrace();
-                        }
+            if ( (ev = System.getenv(ENV_PREFIX + propName )) != null) {
+                try {
+                    if (propName.indexOf('_') > 0) {
+                        PropertyUtils.setNestedProperty(confObject, propName.replaceAll("_", "."), ev);
                     }
-                });
+                    else {
+                        BeanUtils.setProperty(confObject, propName, ev);
+                    }
+                    System.err.format("Override config['%s'] with env['%s']%n", propName , ENV_PREFIX + propName);
+                } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
         return confObject;
     }
 

@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import com.google.common.collect.ImmutableList;
 import com.rdnsn.b2intgr.MainApp;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
+import com.rdnsn.b2intgr.exception.B2BadRequestException;
 import com.rdnsn.b2intgr.model.ProxyUrl;
 import com.rdnsn.b2intgr.util.JsonHelper;
 import org.apache.camel.*;
@@ -46,7 +47,7 @@ import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.model.UploadData;
 import com.rdnsn.b2intgr.model.UserFile;
 import com.rdnsn.b2intgr.processor.AuthAgent;
-import com.rdnsn.b2intgr.processor.UploadException;
+import com.rdnsn.b2intgr.exception.UploadException;
 import com.rdnsn.b2intgr.processor.UploadProcessor;
 
 /**
@@ -262,7 +263,7 @@ public class ZRouteBuilder extends RouteBuilder {
                 .to( "direct:start_large_upload", "direct:make_upload_parts", "direct:finish_large_file")
 
 
-.log(LoggingLevel.DEBUG, log, body().toString())
+                .log(LoggingLevel.DEBUG, log, body().toString())
 //                .process(new PersistMapping())
                 .end();
 
@@ -308,8 +309,6 @@ public class ZRouteBuilder extends RouteBuilder {
                 .process(exchange -> {
 
                     final FilePart partFile = exchange.getIn().getBody(FilePart.class);
-//                    final FilePart partFile = coerceClass(exchange.getIn(), FilePart.class);
-//                    JsonHelper.coerceClass(objectMapper, exchange.getIn(), StartLargeUploadResponse.class);
 
                     final ProducerTemplate producer = exchange.getContext().createProducerTemplate();
                     final StartLargeUploadResponse uploadResponse = exchange.getIn().getHeader("startLargeUploadResponse", StartLargeUploadResponse.class);
@@ -333,28 +332,21 @@ public class ZRouteBuilder extends RouteBuilder {
 }
                      */
 
-
-
                     Integer code = gotUploadUrlURL.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
                     log.info("gotUploadUrlURL RESPONSE_CODE:{ '{}' partFileId: '{}'}", code, uploadResponse.getFileId());
 
 
                     if (code != null && HttpStatus.SC_OK == code) {
-                        try {
-                            Map<String, String> startValsResponse  = JsonHelper.coerceClass(objectMapper, gotUploadUrlURL, HashMap.class);
 
-                            assert(startValsResponse.get("fileId").equals(partFile.getFileId()));
+                        Map<String, String> startValsResponse  = JsonHelper.coerceClass(objectMapper, gotUploadUrlURL, HashMap.class);
 
-                            log.debug("partUploadUrl: {}", startValsResponse.get("uploadUrl"));
+                        assert(startValsResponse.get("fileId").equals(partFile.getFileId()));
 
-                            partFile.setUploadUrl(startValsResponse.get("uploadUrl"));
-                            partFile.setFileId(startValsResponse.get("fileId"));
-                            partFile.setAuthorizationToken(startValsResponse.get("authorizationToken"));
+                        log.debug("partUploadUrl: {}", startValsResponse.get("uploadUrl"));
 
-                        } catch (Exception e) {
-                            throw new UploadException(e);
-                        }
-
+                        partFile.setUploadUrl(startValsResponse.get("uploadUrl"));
+                        partFile.setFileId(startValsResponse.get("fileId"));
+                        partFile.setAuthorizationToken(startValsResponse.get("authorizationToken"));
 
                         final JsonObject partUploadObj = new JsonObject();
                         partUploadObj.put("fileId", partFile.getFileId());
@@ -381,15 +373,11 @@ public class ZRouteBuilder extends RouteBuilder {
                         log.info("uploaderOut RESPONSE_CODE:{ '{}' partFile: '{}'}", code, partFile);
 
                         if (code != null && HttpStatus.SC_OK == code) {
-                            try {
-                                Map<String, Object> uplPartResponse  = JsonHelper.coerceClass(objectMapper, uploaderOut, HashMap.class);
-                                assert(uplPartResponse.get("fileId").equals(partFile.getFileId()));
-                                exchange.getOut().copyFromWithNewBody(exchange.getIn(), partFile);
-    //                            exchange.getOut().copyFromWithNewBody(uploaderOut, partFile);
-//                                exchange.getOut().setHeader("uplPartResponse", uplPartResponse);
-                            } catch (Exception e) {
-                                throw new UploadException(e);
-                            }
+
+                            Map<String, Object> uplPartResponse  = JsonHelper.coerceClass(objectMapper, uploaderOut, HashMap.class);
+                            assert(uplPartResponse.get("fileId").equals(partFile.getFileId()));
+                            exchange.getOut().copyFromWithNewBody(exchange.getIn(), partFile);
+
                         } else {
                             ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, uploaderOut, ErrorObject.class);
                             log.debug("errorObject: {} ", errorObject);
@@ -402,35 +390,12 @@ public class ZRouteBuilder extends RouteBuilder {
                         partFile.setError(errorObject);
                         throw new UploadException("Response code fail (" + code + ") partFile '" + partFile + "' not uploaded");
                     }
-
                 })
-//                .enrich(getHttp4Proto(authAgent.getApiUrl()) + ppath_get_upload_part_url, new AggregationStrategy() {
-//                            @Override
-//                            public Exchange aggregate(Exchange original, Exchange resource) {
-//                                if (original == null) {
-//                                    return resource;
-//                                }
-//
-//                                final AuthResponse auth = resource.getIn().getBody(AuthResponse.class);
-//                                original.getIn().setHeader(Constants.AUTH_RESPONSE, auth);
-//                                original.getIn().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
-//
-//                                if (original.getPattern().isOutCapable()) {
-//                                    original.getOut().copyFrom(original.getIn());
-////            original.getOut().setBody( original.getIn().getBody());
-//                                    original.getOut().setHeader(Constants.AUTH_RESPONSE, auth);
-//                                    original.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
-//                                }
-//                                return original;
-//                            }
-//                        })
                 .end();
 
         from("direct:start_large_upload")
                 .process(exchange -> {
                     final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
-//                    final UserFile fileItem = exchange.getIn().getHeader(Constants.USER_FILE, UserFile.class);
-// Create a JSON object
 
                     final ProducerTemplate startLgProducer = exchange.getContext().createProducerTemplate();
                     final UserFile userFile = exchange.getIn().getBody(UserFile.class);
@@ -487,13 +452,9 @@ public class ZRouteBuilder extends RouteBuilder {
                     log.info("start_large_upload RESPONSE_CODE:{ '{}' XBzFileName: '{}'}", code, userFile.getRelativePath());
 
                     if (code != null && HttpStatus.SC_OK == code) {
-                        try {
-                            StartLargeUploadResponse uploadResponse = objectMapper.readValue(startLgResponseOut.getBody(String.class), StartLargeUploadResponse.class);
+                            StartLargeUploadResponse uploadResponse = coerceClass(startLgResponseOut, StartLargeUploadResponse.class);
                             exchange.getOut().copyFromWithNewBody(startLgResponseOut, userFile);
                             exchange.getOut().setHeader("startLargeUploadResponse", uploadResponse);
-                        } catch (Exception e) {
-                            throw new UploadException(e);
-                        }
 //                    } else {
 //                        ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, responseOut, ErrorObject.class);
 //                        log.debug("errorObject: {} ", errorObject);
@@ -537,12 +498,8 @@ public class ZRouteBuilder extends RouteBuilder {
                         Integer code = uploaderOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
                         log.info("uploaderOut RESPONSE_CODE:{ '{}' finishUpload: '{}'}", code, parts.get(0).getFileId());
                         if (code != null && HttpStatus.SC_OK == code) {
-                            try {
-                                UploadFileResponse finishUploadResponse = JsonHelper.coerceClass(objectMapper, uploaderOut, UploadFileResponse.class);
-                                exchange.getOut().copyFromWithNewBody(exchange.getIn(), finishUploadResponse);
-                            } catch (Exception e) {
-                                throw new UploadException(e);
-                            }
+                            UploadFileResponse finishUploadResponse = JsonHelper.coerceClass(objectMapper, uploaderOut, UploadFileResponse.class);
+                            exchange.getOut().copyFromWithNewBody(exchange.getIn(), finishUploadResponse);
                         } else {
                             ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, uploaderOut, ErrorObject.class);
                             exchange.getOut().copyFromWithNewBody(uploaderOut, errorObject);
@@ -562,10 +519,12 @@ public class ZRouteBuilder extends RouteBuilder {
                 .process(createPost)
                 .enrich(
                     getHttp4Proto(authAgent.getApiUrl()) + ppath_list_buckets, (Exchange original, Exchange resource) -> {
-                        original.getIn().copyFromWithNewBody(
-                                resource.getIn(),
-                                resource.getIn().getBody(String.class)
-                        );
+
+                            BucketListResponse buckets = coerceClass(resource.getIn(), BucketListResponse.class);
+                            log.debug("Bucket access update response: {}", buckets);
+                            original.getOut().copyFromWithNewBody(resource.getIn(), buckets);
+
+                        original.getIn().copyFromWithNewBody(resource.getIn(),buckets);
                         return original;
                     })
                 .end();
@@ -573,13 +532,7 @@ public class ZRouteBuilder extends RouteBuilder {
         from("direct:list_files")
                 .process((exchange) -> {
                     final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
-
-//            String bucketId = exchange.getIn().getHeader("bucketId", String.class);
-//            String bucketId = URLDecoder.decode(exchange.getIn().getHeader("bucketId", String.class), Constants.UTF_8);
-
-//            log.debug(" bucketId: {}", bucketId);
                     ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
-//            lfr.setBucketId(bucketId);
                     exchange.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
                     exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
                     exchange.getOut().setBody(lfr.toString());
@@ -609,36 +562,18 @@ public class ZRouteBuilder extends RouteBuilder {
                 .process(exchange -> {
                     TouchBucketRequest bt = exchange.getIn().getBody(TouchBucketRequest.class);
                     bt.setAccountId(serviceConfig.getRemoteAccountId());
-//
 
-//                    final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
                     exchange.getOut().setHeader(Constants.AUTHORIZATION, exchange.getIn().getHeader(Constants.AUTHORIZATION, String.class));
-//                    exchange.getOut().copyFromWithNewBody(
-//                        exchange.getIn(),
-//                        exchange.getIn()
-//                            .getBody(TouchBucketRequest.class)
-//                            .setAccountId(serviceConfig.getRemoteAccountId())
-//                            .toString()
-//                    );
-
                     exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-
-
-//                    exchange.getOut().copyFromWithNewBody(exchange.getIn(), bt);
-
-//                    String bucketId = URLDecoder.decode(exchange.getIn().getHeader("bucketId", String.class), Constants.UTF_8)
-//                            .replaceAll(serviceConfig.getCustomSeparator(), "/");
-//
-//                    log.debug("got bt {}", bt);
                     exchange.getOut().setBody(bt.toString());
                 })
+
                 .enrich(getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_update_bucket", (Exchange original, Exchange resource) -> {
-                        original.getIn().copyFromWithNewBody(
-                                resource.getIn(),
-                                resource.getIn().getBody(String.class)
-                        );
-                        return original;
-                    })
+                    B2Bucket bucket = coerceClass(resource.getIn(), B2Bucket.class);
+                    log.debug("Bucket access update response: {}", bucket);
+                    original.getOut().copyFromWithNewBody(resource.getIn(), bucket);
+                    return original;
+                })
             .end();
 
         from("direct:dir_auth")
@@ -648,43 +583,16 @@ public class ZRouteBuilder extends RouteBuilder {
                 DirectoryAccessRequest bt = exchange.getIn().getBody(DirectoryAccessRequest.class);
                 String authToken = exchange.getIn().getHeader(Constants.AUTHORIZATION, String.class);
 
-//                IN.removeHeaders("*");
-
                 exchange.getOut().setHeader(Constants.AUTHORIZATION, authToken);
-//                exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-//                exchange.getOut().setHeader("Content-Type", "application/x-www-form-urlencoded");
-//                exchange.getOut().setHeader("Content-Length", Integer.toString(bt.toString().getBytes().length));
-
-
                 exchange.getOut().setBody(bt);
 
 
-                log.debug("body: {}", bt);
+                log.debug("request body: {}", bt);
                 log.debug("getHeaders: {}", exchange.getOut().getHeaders().entrySet());
             })
                 .marshal().json(JsonLibrary.Jackson)
                 .enrich(getHttp4Proto(authAgent.getApiUrl()) + "/b2api/v1/b2_get_download_authorization?throwExceptionOnFailure=false&okStatusCodeRange=100",(Exchange original, Exchange resource) -> {
-                original.getIn().copyFromWithNewBody(
-                        resource.getIn(),
-                        resource.getIn().getBody(String.class));
-//                final Integer code = resource.getOut().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-//
-//                log.info("HTTP_RESPONSE_CODE:{ '{}'}", code);
-//
-//                if (code != null && HttpStatus.SC_OK == code) {
-//                    log.info("Completed: '{}'", "yeah");
-//                    String respBody = resource.getOut().getBody(String.class);
-//                    log.debug("respBody: {} ", respBody);
-//                    original.getOut().setBody(respBody);
-//                }
-//                else {
-////                    ErrorObject errorObject =  JsonHelper.coerceClass(objectMapper, resource.getOut(), ErrorObject.class);
-////                    log.debug("errorObject: {} ", errorObject);
-////                    original.getOut().setBody(errorObject);
-//                    String respBody = resource.getOut().getBody(String.class);
-//                    log.debug("else respBody: {} ", respBody);
-//
-//                }
+                original.getIn().copyFromWithNewBody( resource.getIn(),coerceClass(resource.getIn(), HashMap.class) );
                 return original;
             })
         .end();
@@ -846,9 +754,9 @@ public class ZRouteBuilder extends RouteBuilder {
                 .to("direct:rest.multipart")
 
                 // List Buckets
-                .get("/list").id("ListBuckets")
+                .get("/list").id("ListBuckets").outType(BucketListResponse.class)
                 .description("List buckets")
-                .bindingMode(RestBindingMode.off)
+                .bindingMode(RestBindingMode.auto)
                 .produces("application/json")
                 .to("direct:rest.list_buckets")
 
@@ -887,7 +795,7 @@ public class ZRouteBuilder extends RouteBuilder {
                 .to("direct:rest.dir_auth")
 
                 // chmod on bucket
-                .put(bchmodService).type(TouchBucketRequest.class)
+                .put(bchmodService).type(TouchBucketRequest.class).outType(BucketListResponse.class)
                 .description("Update bucket")
                 .bindingMode(RestBindingMode.auto)
                 .produces("application/json")
@@ -1129,12 +1037,3 @@ public class ZRouteBuilder extends RouteBuilder {
         }
     }
 }
-class PartFileItemFactory {
-    private static int counter = 1;
-
-    public static PartFile getPartFile(){
-        return new PartFile()
-                .setPartNumber(counter++);
-    }
-}
-

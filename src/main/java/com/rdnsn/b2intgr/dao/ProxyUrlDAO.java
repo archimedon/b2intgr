@@ -6,6 +6,9 @@ import com.rdnsn.b2intgr.model.ProxyUrl;
 import org.apache.commons.beanutils.BeanUtils;
 import org.apache.commons.beanutils.PropertyUtils;
 import org.neo4j.driver.v1.*;
+import org.neo4j.driver.v1.exceptions.ServiceUnavailableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -24,12 +27,19 @@ import static org.neo4j.driver.v1.Values.value;
  *
  */
 public class ProxyUrlDAO implements AutoCloseable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ProxyUrlDAO.class);
+
     private Driver driver;
     private final ObjectMapper objectMapper;
 
     public ProxyUrlDAO(Neo4JConfiguration conf, ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        driver = GraphDatabase.driver(conf.getUrlString(), AuthTokens.basic(conf.getUsername(), conf.getPassword()));
+        try {
+            driver = GraphDatabase.driver(conf.getUrlString(), AuthTokens.basic(conf.getUsername(), conf.getPassword()));
+        } catch (ServiceUnavailableException sue) {
+            throw new RuntimeException("Unable to connect to: " + conf.getUrlString());
+        }
     }
 
     @Override
@@ -42,18 +52,18 @@ public class ProxyUrlDAO implements AutoCloseable {
         try {
             Session session = getSession();
             StatementResult re = session.run("CREATE (b:BBIntgrTest {stat:true}) return b.stat;");
-            stat = ( re.hasNext() ) ? re.single().get(0).asBoolean(): false ;
+            stat = (re.hasNext()) ? re.single().get(0).asBoolean() : false;
             session.run("MATCH (b:BBIntgrTest) DELETE b;");
             session.close();
-        }
-        catch(Exception e) {
+        } catch (Exception e) {
             stat = false;
-            e.printStackTrace();
+            LOG.error(e.getMessage());
+        } finally {
+            if (driver != null) {
+                close();
+            }
+            return stat;
         }
-        finally {
-            close();
-        }
-        return stat;
     }
 
     public Object saveOrUpdateMapping(final ProxyUrl message) {
@@ -108,8 +118,6 @@ public class ProxyUrlDAO implements AutoCloseable {
 
     public String getActual(final ProxyUrl message) {
 
-
-
         try (Session session = getSession()) {
             String resData = session.writeTransaction((Transaction tx) ->
             {
@@ -124,7 +132,7 @@ public class ProxyUrlDAO implements AutoCloseable {
                     Record res = result.single();
                     found = res.size() > 0 ? res.get(0).asString() : null;
 
-                    System.err.format("found: %s%n", found);
+                    LOG.debug("found: '{}'", found);
 
                 }
 
@@ -151,16 +159,10 @@ public class ProxyUrlDAO implements AutoCloseable {
                     if (res.size() > 0) {
                         try {
                             HashMap map = new HashMap(res.get(0).asMap() );
-                            System.err.format("map: %s%n", map);
-
                             copyProperties(found, map);
-//                            BeanUtils.copyProperties(found, map);
-
-                            System.err.format("found: %s%n", found);
-
-
+                            LOG.debug("found: '{}'", found);
                         } catch (Exception e) {
-                            e.printStackTrace();
+                            LOG.error(e.getMessage(), e);
                         }
                     }
                 }
@@ -195,21 +197,6 @@ public class ProxyUrlDAO implements AutoCloseable {
         }
     }
 
-//    private void copyProperties(ProxyUrl found, Map<String, Object> map) {
-//
-//        map.entrySet().forEach( (Map.Entry<String, Object> entry) -> {
-//            try {
-//                System.err.format("key: %s , val: %s %n", entry.getKey(), entry.getValue().toString());
-//                BeanUtils.setProperty(found, entry.getKey(), entry.getValue());
-//            } catch (IllegalAccessException e) {
-//                e.printStackTrace();
-//            } catch (InvocationTargetException e) {
-//                e.printStackTrace();
-//            }
-//        });
-//
-//    }
-//
     synchronized private Session getSession() {
         return driver.session();
     }

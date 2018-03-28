@@ -11,7 +11,7 @@
   "poolSize": 5,
   "maxPoolSize": 10,
   "neo4jConf": {
-    "urlString": "bolt://localhost:7689",
+    "urlString": "bolt://localhost:7476",
     "username": "neo4j",
     "password": "reggae"
   },
@@ -22,7 +22,7 @@
     "password": "r3664370n",
     "recipients": "ronniedz1s@yahoo.com"
   },
-    "remoteStorageConf": {
+  "remoteStorageConf": {
     "bucket": {
       "bucketName": "b2public",
       "bucketId": "2ab327a44f788e635ef20613"
@@ -32,12 +32,3 @@
     "authenticationUrl": "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"
   }
 }
-
-
-/*
-"username"  -> Option(System.getenv("SMTP_USER")).getOrElse("a2zlangmgr@gmail.com"),
-"password"  -> Option(System.getenv("SMTP_PASS")).getOrElse("password"),
-"host"      -> Option(System.getenv("SMTP_HOST")).getOrElse("smtp.gmail.com:465"),
-"rcpt"      -> Option(System.getenv("SMTP_RCPTS")).getOrElse("garrickajo@gmail.com, ronniedz1s@yahoo.com"),
-
- */

@@ -10,12 +10,15 @@ import org.apache.camel.processor.aggregate.AggregationStrategy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.api.AuthResponse;
+import org.apache.commons.lang.StringUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.rdnsn.b2intgr.util.JsonHelper.coerceClass;
 
 public class AuthAgent implements AggregationStrategy {
 
@@ -54,13 +57,13 @@ public class AuthAgent implements AggregationStrategy {
 
             HttpResponse response = httpclient.execute(request);
             response.getEntity().writeTo(buf);
-            authResponse = objectMapper.readValue(buf.toString(Constants.UTF_8), AuthResponse.class);
+            authResponse = coerceClass(objectMapper, buf.toString(Constants.UTF_8), AuthResponse.class);
             log.info("B2 Authorization Received");
             log.debug("Authorization: {}", authResponse.getAuthorizationToken());
+            assert(StringUtils.isNotBlank(authResponse.getAuthorizationToken()));
         } catch (IOException e) {
             e.printStackTrace();
         }
-
 		return this.authResponse;
 	}
 
@@ -76,7 +79,6 @@ public class AuthAgent implements AggregationStrategy {
 
         if (original.getPattern().isOutCapable()) {
             original.getOut().copyFrom(original.getIn());
-//            original.getOut().setBody( original.getIn().getBody());
             original.getOut().setHeader(Constants.AUTH_RESPONSE, auth);
             original.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
 	    }

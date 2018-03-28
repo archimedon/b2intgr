@@ -1,32 +1,32 @@
 package com.rdnsn.b2intgr;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
 import javax.validation.constraints.NotNull;
+import java.net.URI;
+import java.net.URISyntaxException;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-@JsonSerialize()
+@JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
 public class Neo4JConfiguration {
 
 
-    @NotNull
     @JsonProperty
-    private String password = "reggae";
+    private String password;
 
-    @NotNull
     @JsonProperty
-    private String urlString = "bolt://localhost:7687";
+    private String urlString;
 
-    @NotNull
     @JsonProperty
-    private String username = "neo4j";
+    private String username;
 
-    public Neo4JConfiguration() {
-    }
+
+    public Neo4JConfiguration() { }
 
     public String getPassword() {
         return password;
@@ -41,8 +41,27 @@ public class Neo4JConfiguration {
         return urlString;
     }
 
-    public void setUrlString(String urlString) {
-        this.urlString = urlString;
+    public void setUrlString(String urlString)
+    {
+        if (urlString.indexOf("@") > 1) {
+            try {
+                URI uri = new URI(urlString);
+                String[] tmp = uri.getUserInfo().split(":");
+                setUsername(tmp[0]);
+                setPassword(tmp[1]);
+                /*
+                (String scheme,
+               String userInfo, String host, int port,
+               String path, String query, String fragment)
+                 */
+                this.urlString = new URI(uri.getScheme(), null, uri.getHost(), uri.getPort(), uri.getPath(), null, null).toString();
+            } catch (URISyntaxException e) {
+                e.printStackTrace();
+            }
+        }
+        else {
+            this.urlString = urlString;
+        }
     }
 
     public String getUsername() {

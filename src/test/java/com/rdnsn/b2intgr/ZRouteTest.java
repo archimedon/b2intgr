@@ -93,7 +93,6 @@ public class ZRouteTest extends CamelTestSupport {
         objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
         objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
 
-//        this.serviceConfig = getSettings();
         String confFile = readStream(getClass().getResourceAsStream(configFilePath));
 
         this.serviceConfig = new Configurator(objectMapper).getConfiguration(confFile);

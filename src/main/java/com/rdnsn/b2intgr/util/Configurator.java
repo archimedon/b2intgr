@@ -30,6 +30,17 @@ public class Configurator {
     private final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";
     private final String configFilePath = "/config.json";
 
+    private final String ENV_VAR_PATTERN = "(?i)^B2I_.*";
+
+    private final Map<String, String> ENV_VARS =
+            System.getenv().entrySet().stream()
+                    .filter(entry ->entry.getKey().matches(ENV_VAR_PATTERN))
+                    .collect(Collectors.toMap(
+                        entry -> entry.getKey().toUpperCase().replaceAll("(?<!B2I)_", "."),
+                        entry -> entry.getValue())
+                    );
+
+
     private final ObjectMapper objectMapper;
 
 
@@ -55,9 +66,6 @@ public class Configurator {
 
     @JsonIgnore
     public CloudFSConfiguration getConfiguration(String confFile) {
-        // Load config file
-//        String confFile = readStream(getClass().getResourceAsStream(configFilePath));
-//         CloudFSConfiguration cnfo = JsonHelper.coerceClass(objectMapper, confFile, CloudFSConfiguration.class);
 
          // interpolate $vars in config file
         confFile = injectExtern(confFile);
@@ -89,9 +97,7 @@ public class Configurator {
         crawl(propValueMap).forEach( propName -> {
             String ev = null;
             // Replace dot with underscore because linux no like dot
-            if ( (ev = System.getenv(ENV_PREFIX + propName.replaceAll("\\.", "_") )) != null
-                    || (ev = System.getenv(ENV_PREFIX + propName )) != null) {
-
+            if ( (ev = ENV_VARS.get(ENV_PREFIX + propName.toUpperCase())) != null) {
                 try {
                     if (propName.indexOf('.') > 0) {
                         PropertyUtils.setNestedProperty(confObject, propName, ev);
@@ -109,6 +115,7 @@ public class Configurator {
         return confObject;
     }
 
+
     @JsonIgnore
     private String injectExtern(String confFile) {
         Matcher m = Pattern.compile(CONFIG_ENV_PATTERN).matcher(confFile);
@@ -117,8 +124,8 @@ public class Configurator {
             tmp = System.getenv(m.group(1));
             if (tmp != null && tmp.length() > 0) {
                 LOG.info("Setting: '{}' from environment", m.group(1));
-                confFile = confFile.replaceAll("\\$" + m.group(1) +"\\b" , tmp);
-//                confFile = m.replaceFirst(tmp);
+//                confFile = confFile.replaceAll("\\$" + m.group(1) +"\\b" , tmp);
+                confFile = m.replaceFirst(tmp);
             }
         }
         return confFile;

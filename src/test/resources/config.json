@@ -1,3 +1,30 @@
+/**
+                                                            JSON Standards Compliance - "lenient"
+                                                            (Allows for these comments)
+
+  Configure CloudFS Backblaze integration
+
+  There are 3 ways to configure:
+    1. Hard code values
+    2. With environment variable references. Eg:
+
+      ` "adminEmail": "$ADMIN_EMAIL" `
+      ` "poolSize": $POOLSIZE `
+
+    3. Override any value using environment variables prefixed with `B2I_`. Eg:
+
+        `export B2I_adminEmail='codemonkey@jungle.org' `
+
+       Case-insensitive so this also works:
+
+        `export B2I_ADMINEMAIL='codemonkey@jungle.org' `
+
+       Nested values... separate with underscore ('_') or period ('.').
+       * Note *, BASH does not permit variables with periods ('.'). Use underscore_ :
+
+        `export B2I_neo4jConf_username='dbuser' `
+
+*/
 {
   "host": "localhost",
   "port": 8080,
@@ -11,7 +38,11 @@
   "poolSize": 5,
   "maxPoolSize": 10,
   "neo4jConf": {
-    "urlString": "bolt://localhost:7476",
+    // Be sure to use the BOLT server's port
+    "urlString": "bolt://localhost:7375",
+
+    // Set credentials or augment connection string:
+    //  "urlString": "bolt://neo4j:reggae@localhost:7375"
     "username": "neo4j",
     "password": "reggae"
   },
@@ -23,10 +54,12 @@
     "recipients": "ronniedz1s@yahoo.com"
   },
   "remoteStorageConf": {
+    // Deprecated. All can now be set by LMS
     "bucket": {
       "bucketName": "b2public",
       "bucketId": "2ab327a44f788e635ef20613"
     },
+
     "accountId": "a374f8e3e263",
     "applicationKey": "0012091458045a46b01b14df849c659aebb820a53c",
     "authenticationUrl": "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"

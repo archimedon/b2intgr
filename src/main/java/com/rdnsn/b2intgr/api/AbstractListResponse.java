@@ -1,5 +1,6 @@
 package com.rdnsn.b2intgr.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.ArrayList;
@@ -8,8 +9,10 @@ import java.util.function.Function;
 
 public abstract class AbstractListResponse<E extends B2BaseFile> extends B2ReadsError implements ReadsError {
 
+    @JsonIgnore
     protected Function<E, String> makeDownloadUrl = null; //x -> x.getDownloadUrl() == null ? "/" + x.getFileName() : x.getDownloadUrl();
 
+    @JsonIgnore
     protected boolean beenRun = false;
 
     @JsonProperty

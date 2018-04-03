@@ -124,8 +124,7 @@ public class Configurator {
             tmp = System.getenv(m.group(1));
             if (tmp != null && tmp.length() > 0) {
                 LOG.info("Setting: '{}' from environment", m.group(1));
-//                confFile = confFile.replaceAll("\\$" + m.group(1) +"\\b" , tmp);
-                confFile = m.replaceFirst(tmp);
+                confFile = confFile.replaceAll("\\$" + m.group(1) +"\\b" , tmp);
             }
         }
         return confFile;

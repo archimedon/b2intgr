@@ -1,14 +1,17 @@
 package com.rdnsn.b2intgr.api;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.*;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
+
+@SuppressWarnings("deprecation")
+@JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
+@JsonSerialize(include = JsonSerialize.Inclusion.NON_EMPTY)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class B2ReadsError implements ReadsError {
 
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
+    //JsonInclude(value = JsonInclude.Include.NON_NULL)
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     protected ReadsError error = null;
 
@@ -39,22 +42,22 @@ public class B2ReadsError implements ReadsError {
         return this;
     }
 
-    @JsonIgnore
+    //JsonIgnore
     public String getCode() {
         return (String) (error == null ? null : error.getCode());
     }
 
-    @JsonIgnore
+    //JsonIgnore
     public Integer getStatus() {
         return (Integer) (error == null ? null : error.getStatus());
     }
 
-    @JsonIgnore
+    //JsonIgnore
     public String getMessage() {
         return (String) (error == null ? null : error.getMessage());
     }
 
-    @JsonIgnore
+    //JsonIgnore
     public ReadsError mandatoryErrorObject(){
         if (error == null) {
             error = new ErrorObject();

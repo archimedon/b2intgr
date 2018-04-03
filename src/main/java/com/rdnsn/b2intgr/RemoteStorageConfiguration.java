@@ -38,8 +38,8 @@ public class RemoteStorageConfiguration {
 	@JsonProperty
 	private String applicationKey = "0012091458045a46b01b14df849c659aebb820a53c";
 
-	
-	
+
+
 	/**
 	 * "buckets": [
     {
@@ -50,10 +50,13 @@ public class RemoteStorageConfiguration {
         "bucketType": "allPrivate",
         "lifecycleRules": []
     }, ... ]
-	 */
-	@NotNull
-	@JsonProperty
-	private Map<String, String> bucket = new HashMap<String, String>();
+
+    */
+    // Only used in testing.
+    // BucketId and/or Name should be sent in request when required
+    @NotNull
+    @JsonProperty
+    private Map<String, String> bucket = new HashMap<String, String>();
 
 
 	public String getAccountId() {

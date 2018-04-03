@@ -93,6 +93,9 @@ public class CloudFSConfiguration {
     @JsonProperty
     private MailConfig mailConfig;
 
+    @JsonProperty
+    private double backOffMultiplier;
+
     public MailConfig getMailConfig() {
         return mailConfig;
     }
@@ -235,4 +238,13 @@ public class CloudFSConfiguration {
         return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
     }
 
+
+    public CloudFSConfiguration setBackOffMultiplier(double backOffMultiplier) {
+        this.backOffMultiplier = backOffMultiplier;
+        return this;
+    }
+
+    public double getBackOffMultiplier() {
+        return backOffMultiplier;
+    }
 }

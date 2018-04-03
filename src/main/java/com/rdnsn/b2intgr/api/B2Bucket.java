@@ -108,8 +108,9 @@ public class B2Bucket {
         this.revision = revision;
         return this;
     }
+
+    @Override
     public String toString() {
         return ReflectionToStringBuilder.toString(this, ToStringStyle.JSON_STYLE);
     }
-
 }

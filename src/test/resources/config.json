@@ -1,28 +1,34 @@
 /**
-                                                            JSON Standards Compliance - "lenient"
-                                                            (Allows for these comments)
+  JSON Standards compliance, "lenient".
+  (Allows for these comments)
 
-  Configure CloudFS Backblaze integration
+_______________________________________
+Configure CloudFS Backblaze integration
+---------------------------------------
 
-  There are 3 ways to configure:
-    1. Hard code values
+There are 3 ways to configure:
+
+    1. Hardcoded values
+
+        ` "docRoot": "/tmp/b2intgr", `
+
     2. With environment variable references. Eg:
 
-      ` "adminEmail": "$ADMIN_EMAIL" `
-      ` "poolSize": $POOLSIZE `
+        ` "adminEmail": "$ADMIN_EMAIL" `
+        ` "poolSize": $POOLSIZE `
 
-    3. Override any value using environment variables prefixed with `B2I_`. Eg:
+    3.  Override any value using environment variables prefixed with `B2I_`. Eg:
 
-        `export B2I_adminEmail='codemonkey@jungle.org' `
+          `export B2I_adminEmail='codemonkey@jungle.org' `
 
-       Case-insensitive so this also works:
+        Case-insensitive so this also works:
 
-        `export B2I_ADMINEMAIL='codemonkey@jungle.org' `
+          `export B2I_ADMINEMAIL='codemonkey@jungle.org' `
 
-       Nested values... separate with underscore ('_') or period ('.').
-       * Note *, BASH does not permit variables with periods ('.'). Use underscore_ :
+        - Nested values... separate with underscore ('_') or period ('.').
+          * Note *, BASH does not permit variables with periods ('.'). Use underscore_ :
 
-        `export B2I_neo4jConf_username='dbuser' `
+            `export B2I_neo4jConf_username='dbuser' `
 
 */
 {
@@ -34,12 +40,13 @@
   "customSeparator": "\\^",
   "adminEmail": "ronniedz@gmail.com",
   "maximumRedeliveries": 4,
+  "backOffMultiplier": 5,
   "redeliveryDelay": 3000,
   "poolSize": 5,
   "maxPoolSize": 10,
   "neo4jConf": {
     // Be sure to use the BOLT server's port
-    "urlString": "bolt://localhost:7375",
+    "urlString": "bolt://localhost:7476",
 
     // Set credentials or augment connection string:
     //  "urlString": "bolt://neo4j:reggae@localhost:7375"
@@ -51,10 +58,15 @@
     "port": 465,
     "username": "a2zlangmgr@gmail.com",
     "password": "r3664370n",
+    /* Comma-separated list of recipient addresses:
+
+      "recipients": "'Ronald Dennison <ronniedz1s@yahoo.com>', 'davsclaus@apache.org', .. 'acc@host.tld' "
+
+    */
     "recipients": "ronniedz1s@yahoo.com"
   },
   "remoteStorageConf": {
-    // Deprecated. All can now be set by LMS
+    // Deprecated. Only used in testing. All can now be set by LMS
     "bucket": {
       "bucketName": "b2public",
       "bucketId": "2ab327a44f788e635ef20613"

@@ -30,4 +30,6 @@ public interface Constants {
 
 	public long B2_TOKEN_TTL        = (24 * 60 * 60) - 10;
 	public String DIR_PATH = "path";
+
+    public static final String[] B2_BUCKET_TYPES = new String[]{"allPrivate", "allPublic"};
 }

@@ -3,16 +3,23 @@ package com.rdnsn.b2intgr;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rdnsn.b2intgr.api.B2Bucket;
+import com.rdnsn.b2intgr.api.BucketListResponse;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
 import com.rdnsn.b2intgr.util.Configurator;
-import org.apache.camel.CamelContext;
+import com.rdnsn.b2intgr.util.Constants;
+import com.rdnsn.b2intgr.util.JsonHelper;
+import com.rdnsn.b2intgr.util.MirrorMap;
+import org.apache.camel.*;
+import org.apache.camel.http.common.HttpMethods;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.util.jndi.JndiContext;
 import org.apache.commons.beanutils.BeanUtils;
 import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.http.HttpStatus;
 import org.neo4j.driver.v1.exceptions.ServiceUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +36,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.rdnsn.b2intgr.route.ZRouteBuilder.getHttp4Proto;
+
 
 /**
  * Initialize and start the camel routes
@@ -36,8 +45,6 @@ import java.util.stream.Collectors;
 public class MainApp {
     private static final Logger LOG = LoggerFactory.getLogger(MainApp.class);
 
-    private static final String ENV_PREFIX = "B2I_";
-    private static final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";
     private static final long TTL = (12 * 60 * 60) - 10;
 
     private static long lastmod = 0;
@@ -135,8 +142,34 @@ public class MainApp {
 
         CamelContext camelContext = new DefaultCamelContext(jndiContext);
 //        camelContext.addComponent("activemq", ActiveMQComponent.activeMQComponent("vm://localhost?broker.persistent=false"));
-        camelContext.addRoutes(new ZRouteBuilder(objectMapper, serviceConfig, authAgent));
+        ZRouteBuilder zroute = new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
+        camelContext.addRoutes(zroute);
         camelContext.start();
+
+
+//        String gatewayUri = getHttp4Proto(RESTAPI_ENDPOINT + ZRouteBuilder.LIST_BUCKETS_URI);
+
+        Endpoint gatewayEndpoint = zroute.endpoint("direct:rest.list_buckets");
+
+        Producer producer = gatewayEndpoint.createProducer();
+//        ProducerTemplate producer = gatewayEndpoint.getCamelContext().createProducerTemplate();
+
+        LOG.info("Sending order");
+        Exchange exchange = gatewayEndpoint.createExchange(ExchangePattern.OutOnly);
+//        exchange.getIn().setHeader(Constants.AUTHORIZATION, authAgent.getAuthResponse().getAuthorizationToken());
+//        exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+        producer.process(exchange);
+
+        Message out = exchange.getOut();
+
+
+        BucketListResponse buckets = JsonHelper.coerceClass(objectMapper, exchange.getOut(), BucketListResponse.class);
+
+        MirrorMap<String, String> bucketIdNameMap = new MirrorMap<String, String>(
+            buckets.getBuckets().stream().collect(Collectors.toMap(B2Bucket::getBucketId, B2Bucket::getBucketName))
+        );
+
+        zroute.setBucketMap(bucketIdNameMap);
     }
 
 //    private String readStream(InputStream stream) throws IOException {

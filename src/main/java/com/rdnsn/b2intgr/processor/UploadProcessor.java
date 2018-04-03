@@ -14,6 +14,7 @@ import com.rdnsn.b2intgr.exception.UploadException;
 import com.rdnsn.b2intgr.util.JsonHelper;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
+import org.apache.camel.Processor;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.http4.HttpMethods;
 import org.apache.http.HttpStatus;
@@ -32,7 +33,7 @@ import com.rdnsn.b2intgr.route.ZRouteBuilder;
 
 
 
-public class UploadProcessor extends BaseProcessor {
+public class UploadProcessor implements Processor {
 
 	protected static final Logger log = LoggerFactory.getLogger(UploadProcessor.class);
 	
@@ -106,12 +107,12 @@ public class UploadProcessor extends BaseProcessor {
 		log.info("HTTP_RESPONSE_CODE:{ '{}' XBzFileName: '{}'}", code, userFile.getRelativePath());
 
 		if (code != null && HttpStatus.SC_OK == code) {
-            // TODO: 3/2/18 Fix DownloadURL setting. Would prefer a single point.
 			final String downloadUrl =  String.format("%s/file/%s/%s",
                 remoteAuth.getDownloadUrl(),
-                serviceConfig.getRemoteStorageConf().getBucketName(),
+                    // TODO: Change to bucketName
+                    userFile.getBucketId(),
                 userFile.getRelativePath());
-			
+
 			log.info("Completed: '{}'", downloadUrl);
 
             UploadFileResponse uploadResponse = coerceClass(responseOut, UploadFileResponse.class);

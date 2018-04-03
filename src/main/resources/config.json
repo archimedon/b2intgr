@@ -8,6 +8,7 @@
   "adminEmail": "ronniedz@gmail.com",
   "maximumRedeliveries": 4,
   "redeliveryDelay": 3000,
+  "backOffMultiplier": 5,
   "poolSize": 5,
   "maxPoolSize": 10,
   "neo4jConf": {

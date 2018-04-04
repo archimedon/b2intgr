@@ -1,7 +1,9 @@
 package com.rdnsn.b2intgr.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rdnsn.b2intgr.api.UploadFileResponse;
 import org.apache.camel.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +13,7 @@ import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Formatter;
+import java.util.List;
 
 public class JsonHelper {
     private static final Logger LOG = LoggerFactory.getLogger(JsonHelper.class);
@@ -29,6 +32,17 @@ public class JsonHelper {
 
 
     public static <T> T coerceClass(final ObjectMapper objectMapper, final String string, Class<T> type) {
+        T obj = null;
+        try {
+            obj = objectMapper.readValue(string, type);
+        } catch (IOException e) {
+            LOG.error("Error parsing: '" + string + "'", e);
+            throw new RuntimeException(e.getCause());
+        }
+        return obj;
+    }
+
+    public static <T> T coerceClass(final ObjectMapper objectMapper, final String string, TypeReference<List<T>> type) {
         T obj = null;
         try {
             obj = objectMapper.readValue(string, type);

@@ -1,6 +1,7 @@
 package com.rdnsn.b2intgr;
 
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
@@ -8,6 +9,7 @@ import com.rdnsn.b2intgr.api.AuthResponse;
 import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
 import com.rdnsn.b2intgr.api.UploadFileResponse;
 import com.rdnsn.b2intgr.dao.ProxyUrlDAO;
+import com.rdnsn.b2intgr.model.UserFile;
 import com.rdnsn.b2intgr.processor.AuthAgent;
 import com.rdnsn.b2intgr.route.ZRouteBuilder;
 import com.rdnsn.b2intgr.util.Configurator;
@@ -279,10 +281,13 @@ public class ZRouteTest extends CamelTestSupport {
 //        Path filePath = Paths.get(basePath, "/small.file");
         Path filePath = Paths.get(basePath, "/1024b-file.txt");
 
+        if (! filePath.toFile().exists()) {
+            throw new IOException(("The file: '" + filePath + "' does not exist"));
+        }
 
         final String uploadUrl = RESTAPI_ENDPOINT.toString() +
                 uploadFileUriService
-                        .replace("{bucketId}", "2ab327a44f788e635ef20613")
+                        .replace("{bucketId}", serviceConfig.getRemoteBucketId())
                         .replace("{author}", "testUser")
                         .replace("{destDir}", "testing");
 
@@ -291,20 +296,23 @@ public class ZRouteTest extends CamelTestSupport {
         client.addInput(filePath.toFile(), "1024b");
 
 
+
         String str = client.post();
         log.error("reso:\n{}", str);
-//        UploadFileResponse uploadResponse =
-//                JsonHelper.coerceClass(objectMapper, str, UploadFileResponse.class);
-//
-//        assertNotNull("fileId expected", uploadResponse.getFileId());
-//        log.info(" uploadResponse: '{}'", uploadResponse);
+        List<UserFile> uploadResponses = objectMapper.readValue(str, new TypeReference<List<UserFile>>(){});
+
+        String sha1 = uploadResponses.get(0).getSha1();
+        log.error("sha1: {}", sha1);
+
+        assertNotNull("sha1 expected", sha1);
+        assertEquals(JsonHelper.sha1(filePath.toFile()), sha1);
+        log.info(" uploadResponse: '{}'", uploadResponses.get(0));
     }
 
     @Test
     public void testUploadLarge() throws IOException {
         testListBuckets();
         String basePath = getClass().getResource("/test-samples").getPath();
-//        Path filePath = Paths.get(basePath, "/small.file");
         Path filePath = Paths.get(basePath, "/68b-img.gif");
 
         if (! filePath.toFile().exists()) {
@@ -312,7 +320,7 @@ public class ZRouteTest extends CamelTestSupport {
         }
         final String uploadUrl = RESTAPI_ENDPOINT.toString() +
                 uploadFileUriService
-                        .replace("{bucketId}", "2ab327a44f788e635ef20613")
+                        .replace("{bucketId}", serviceConfig.getRemoteBucketId())
                         .replace("{author}", "testUser")
                         .replace("{destDir}", "testing");
 
@@ -320,14 +328,16 @@ public class ZRouteTest extends CamelTestSupport {
 
         client.addInput(filePath.toFile(), "68b");
 
-
         String str = client.post();
         log.error("reso:\n{}", str);
-//        UploadFileResponse uploadResponse =
-//                JsonHelper.coerceClass(objectMapper, str, UploadFileResponse.class);
-//
-//        assertNotNull("fileId expected", uploadResponse.getFileId());
-//        log.info(" uploadResponse: '{}'", uploadResponse);
+        List<UserFile> uploadResponses = objectMapper.readValue(str, new TypeReference<List<UserFile>>(){});
+
+        String sha1 = uploadResponses.get(0).getSha1();
+        log.error("sha1: {}", sha1);
+
+        assertNotNull("sha1 expected", sha1);
+        assertEquals(JsonHelper.sha1(filePath.toFile()), sha1);
+        log.info(" uploadResponse: '{}'", uploadResponses.get(0));
     }
 
     @Test()

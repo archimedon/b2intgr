@@ -793,7 +793,8 @@ System.err.println("\n-------------------------------\n\n");
         public void process(Exchange exchange) throws IOException {
 
             UploadData obj = exchange.getIn().getBody(UploadData.class);
-            exchange.getOut().setBody(obj.getFiles().stream().map(usrf -> usrf).collect(Collectors.toList()));
+            exchange.getOut().setBody(objectMapper.writeValueAsString(obj.getFiles())); //.stream().map(usrf -> usrf).collect(Collectors.toList()));
+//            exchange.getOut().setBody(obj.getFiles()); //.stream().map(usrf -> usrf).collect(Collectors.toList()));
         }
     }
 

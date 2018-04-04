@@ -1,12 +1,18 @@
 package com.rdnsn.b2intgr.api;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+@JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
+@JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class AbstractListResponse<E extends B2BaseFile> extends B2ReadsError implements ReadsError {
 
     @JsonIgnore

@@ -7,22 +7,23 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
+@SuppressWarnings("deprecation")
 @JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
 @JsonSerialize(include = JsonSerialize.Inclusion.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ListFilesRequest {
 
     @JsonProperty
-    private Integer maxFileCount = 100;
+    private Integer maxFileCount;
 
     @JsonProperty
-    private String prefix = "";
+    private String prefix;
 
     @JsonProperty
-    private String delimiter = "/";
+    private String delimiter;
 
     @JsonProperty
-    private String startFileName = null;
+    private String startFileName;
 
     @JsonProperty
     private String bucketId;

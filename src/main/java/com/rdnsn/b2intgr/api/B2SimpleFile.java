@@ -1,9 +1,11 @@
 package com.rdnsn.b2intgr.api;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
@@ -85,8 +87,9 @@ public class B2SimpleFile implements B2BaseFile {
     }
 
     @Override
+    @JsonIgnore
     public int hashCode() {
-        return fileId.hashCode();
+        return HashCodeBuilder.reflectionHashCode(this, false);
     }
 
     @Override

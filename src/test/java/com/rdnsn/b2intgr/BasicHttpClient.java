@@ -1,7 +1,9 @@
 package com.rdnsn.b2intgr;
 
+import org.apache.camel.util.IOHelper;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import sun.misc.IOUtils;
 
 import java.io.*;
 import java.net.*;
@@ -11,6 +13,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * A bare bones HTTP client using low-level java URLConnection API.
@@ -52,7 +55,11 @@ public class BasicHttpClient {
         }
     }
 
-    public BasicHttpClient addInput(File file, String fieldName) {
+    public BasicHttpClient addInput(File file, String fieldName) throws IOException {
+        if (! file.exists()) {
+            throw new IOException(("The file: '" + file.getName() + "' does not exist"));
+        }
+
         this.files.add(ImmutablePair.of(file, fieldName));
         return this;
     }
@@ -118,6 +125,12 @@ public class BasicHttpClient {
 
         // checks server's status code first
         int status = http.getResponseCode();
+//        log.error("responseOut Headers:\n" +  responseOut.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
+        System.err.println("getResponseMessage:\n" +  http.getResponseMessage());
+        System.err.println("getHeaderFields:\n" +  http.getHeaderFields());
+
+
+
 
         if (status == HttpURLConnection.HTTP_OK) {
             BufferedReader reader = new BufferedReader(new InputStreamReader(http.getInputStream()));
@@ -128,6 +141,7 @@ public class BasicHttpClient {
             reader.close();
             http.disconnect();
         } else {
+            System.err.println("getErrorStream:\n" + org.apache.commons.io.IOUtils.toString(http.getErrorStream(), charset));
             throw new IOException("Server returned failure status: " + status + "\n" + strbuf.toString());
         }
         return strbuf.toString();

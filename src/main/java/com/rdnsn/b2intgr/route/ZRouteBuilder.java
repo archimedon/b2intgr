@@ -33,6 +33,7 @@ import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestDefinition;
 import org.apache.camel.processor.aggregate.AggregationStrategy;
 import org.apache.commons.fileupload.FileItem;
+import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
@@ -145,23 +146,26 @@ public class ZRouteBuilder extends RouteBuilder {
         };
 
         final AggregationStrategy fileResponseAggregator = (Exchange original, Exchange resource) -> {
+            log.error("fileResponseAggregator Headers:\n" +  resource.getIn().getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
+            String body = resource.getIn().getBody(String.class);
 
             final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
             if (code == null || HttpStatus.SC_OK != code) {
-                ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, resource.getIn(), ErrorObject.class);
+                ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, body, ErrorObject.class);
                 original.getOut().copyFromWithNewBody(resource.getIn(), new ListFilesResponse().setError(errorObject));
                 original.getOut().setHeader(Exchange.HTTP_RESPONSE_CODE, Optional.of(code).orElse(HttpStatus.SC_BAD_REQUEST));
 
             } else {
 
-                ListFilesResponse lfResponse = JsonHelper.coerceClass(objectMapper, resource.getIn().getBody(String.class), ListFilesResponse.class);
+                ListFilesResponse lfResponse = JsonHelper.coerceClass(objectMapper, body, ListFilesResponse.class);
 
                 final String bucketId = JsonHelper.coerceClass(objectMapper, original.getIn(), ListFilesRequest.class).getBucketId();
 //                final String bucketId = original.getIn().getBody(ListFilesRequest.class).getBucketId();
                 log.debug("bucketId: {}" , bucketId);
 
                 lfResponse.setBucketId(bucketId);
+                log.debug("lfResponse:\n\t" + lfResponse);
 
                 // TODO: 3/6/18 Get rid of BiFunc MakeDownloadURL()
                 original.getOut().setBody(lfResponse.setMakeDownloadUrl(file ->
@@ -178,9 +182,11 @@ public class ZRouteBuilder extends RouteBuilder {
         };
 
         final Processor createPostFileList = (exchange) -> {
-            final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
             ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
-            exchange.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
+//            final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
+//
+//            ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
+            exchange.getOut().setHeader(Constants.AUTHORIZATION, exchange.getIn().getHeader(Constants.AUTHORIZATION, String.class));
             exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
             exchange.getOut().setBody(lfr);
 
@@ -548,6 +554,9 @@ System.err.println("\n-------------------------------\n\n");
                                 BucketListResponse buckets = coerceClass(resource.getIn(), BucketListResponse.class);
                                 log.debug("Bucket access update response: {}", buckets);
                                 original.getOut().copyFromWithNewBody(resource.getIn(), buckets);
+
+                                // Update the bucket map on each call
+                                setBucketMap(new MirrorMap<String,String>(buckets.getBuckets().stream().collect(Collectors.toMap(B2Bucket::getBucketId, B2Bucket::getBucketName))));
                             }
                         return original;
                     })
@@ -867,29 +876,44 @@ System.err.println("\n-------------------------------\n\n");
         public void process(Exchange exchange) throws B2BadRequestException {
 
             final Message messageIn = exchange.getIn();
-log.debug("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
+log.error("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
             MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
 
 
-                try {
+//                try {
                     InputRepresentation representation = new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
 
-                    log.debug("representation: {}", representation);
+                    log.error("representation: {}", representation);
 
-                    String contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8);
+            String contextId = null;
+            try {
+                contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8);
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
 
-                    if (contextId == null ) {
+            if (contextId == null ) {
                         contextId = "";
                     }
                     else {
                         contextId = contextId.replaceAll(serviceConfig.getCustomSeparator(), "/");
                     }
 
-                    String bucketId = URLDecoder.decode(messageIn.getHeader("bucketId", String.class), Constants.UTF_8);
-                    String author = URLDecoder.decode(messageIn.getHeader("author", String.class), Constants.UTF_8);
+            String bucketId = null;
+            try {
+                bucketId = URLDecoder.decode(messageIn.getHeader("bucketId", String.class), Constants.UTF_8);
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
+            String author = null;
+            try {
+                author = URLDecoder.decode(messageIn.getHeader("author", String.class), Constants.UTF_8);
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
 
-                    log.debug("bucketId: {}", bucketId);
-                    log.debug("author: {}", author);
+            log.error("bucketId: {}", bucketId);
+                    log.error("author: {}", author);
 
 //                    if (contextId.contains("/")) {
 //                        List<String> parts = Arrays.asList(contextId.split("/"));
@@ -897,45 +921,68 @@ log.debug("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entr
 //                        contextId = String.join("/", parts.subList(1, parts.size()));
 //                    }
 
-                    List<FileItem> items = new RestletFileUpload(new DiskFileItemFactory()).parseRepresentation(representation);
+            List<FileItem> items = null;
+            try {
+                items = new RestletFileUpload(new DiskFileItemFactory()).parseRepresentation(representation);
+            } catch (FileUploadException e) {
+                e.printStackTrace();
+            }
 
-                    if (!items.isEmpty()) {
+            if (!items.isEmpty()) {
 
                         UploadData uploadData = new UploadData();
 
                         for (FileItem item : items) {
-                            log.debug("getContentType: {}", item.getContentType());
-                            log.debug("getName: {}", item.getName());
-                            log.debug("getFieldName: {}", item.getFieldName());
-                            log.debug("getSize: {}", item.getSize());
-                            log.debug("toString: {}", item.toString());
+                            log.error("getContentType: {}", item.getContentType());
+                            log.error("getName: {}", item.getName());
+                            log.error("getFieldName: {}", item.getFieldName());
+                            log.error("getSize: {}", item.getSize());
+                            log.error("toString: {}", item.toString());
 
                             if (item.isFormField()) {
                                 uploadData.putFormField(item.getFieldName(), item.getString());
                             } else {
                                 String pathFromUser = contextId + File.separatorChar + item.getFieldName();
-                                String partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
-                                        .replaceAll("%2F", "/");
+                                String partialPath = null;
+                                try {
+                                    partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
+                                            .replaceAll("%2F", "/");
+                                } catch (UnsupportedEncodingException e) {
+                                    e.printStackTrace();
+                                }
 
-                                log.debug("partialPath: {}", partialPath);
+                                log.error("partialPath: {}", partialPath);
                                 Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
+                                log.error("destination: {}", destination);
 
-                                Files.createDirectories(destination.getParent());
 
-                                Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
+                                try {
+                                    Files.createDirectories(destination.getParent());
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+
+                                try {
+                                    Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                                log.error("copied: {} to ", item.getFieldName(),  destination);
 
                                 UserFile userFile = new UserFile(destination)
                                         .setContentType(item.getContentType())
                                         .setBucketId(bucketId)
                                         .setRelativePath(partialPath);
 
+                                log.error("userFile: {}", userFile);
+
                                 userFile.setAuthor(author);
 
-                                userFile.setDownloadUrl(buildURLString(MainApp.RESTAPI_ENDPOINT, "file", partialPath));
+//                                userFile.setDownloadUrl(buildURLString(MainApp.RESTAPI_ENDPOINT, "file", partialPath));
 
-                                log.debug("userFile.getDownloadUrl: {}", userFile.getDownloadUrl());
+//                                log.debug("userFile.getDownloadUrl: {}");
 
-                                item.delete();
+//                                item.delete();
                                 uploadData.addFile(userFile);
                             }
                         }
@@ -956,9 +1003,9 @@ log.debug("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entr
                         }
                         exchange.getOut().setBody(uploadData);
                     }
-                } catch (Exception e) {
-                    throw makeBadRequestException(e, exchange, "Incomplete Request" , 400);
-                }
+//                } catch (Exception e) {
+//                    throw makeBadRequestException(e, exchange, "Incomplete Request" , 400);
+//                }
 
 //            else {
 

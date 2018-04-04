@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 import com.rdnsn.b2intgr.api.ErrorObject;
@@ -79,22 +80,23 @@ public class UploadProcessor implements Processor {
         userFile.setSha1(sha1);
 
         if (log.isDebugEnabled()) {
-            Integer ctr = null;
-
-            if (null == (ctr = exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class))) {
-                ctr = 0;
-            }
-
-            log.debug("Redelivery counter: " + ctr);
-
-            if (Pattern.matches("^\\d{4}.+?\\..+", file.getName())
-                && ctr < serviceConfig.getMaximumRedeliveries() - 1
-            ) {
-                sha1 = sha1 + 'e';
-                userFile.setSha1(sha1);
-                log.debug("pattern matches: '{}'", file.getName());
-                log.debug("Flipped '{}' sha: {}", file.getName(), userFile.getSha1());
-            }
+            userFile.setSha1(corruptAHash(sha1, exchange, file));
+//            Integer ctr = null;
+//
+//            if (null == (ctr = exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class))) {
+//                ctr = 0;
+//            }
+//
+//            log.debug("Redelivery counter: " + ctr);
+//
+//            if (Pattern.matches("^\\d{4}.+?\\..+", file.getName())
+//                && ctr < serviceConfig.getMaximumRedeliveries() - 1
+//            ) {
+//                sha1 = sha1 + 'e';
+//                userFile.setSha1(sha1);
+//                log.debug("pattern matches: '{}'", file.getName());
+//                log.debug("Flipped '{}' sha: {}", file.getName(), userFile.getSha1());
+//            }
         }
 
         final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + "?throwExceptionOnFailure=false&okStatusCodeRange=100", innerExchg -> {
@@ -157,15 +159,27 @@ public class UploadProcessor implements Processor {
 	 * @param exchange
 	 * @param file
 	 */
-	private void corruptAHash(String sha1, Exchange exchange, File file) {
-		int ctr = exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class);
-		log.info("Redelivery counter: " + ctr);
+	private String corruptAHash(String sha1, Exchange exchange, File file) {
+        return sha1;
+//
+//        int ctr = Optional.of(exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class)).orElse(-1);
+//		log.info("Redelivery counter: " + ctr);
+//
+//        if (Pattern.matches("^123abc.*?\\..+", file.getName())
+//                && ctr < serviceConfig.getMaximumRedeliveries() - 1
+//                ) {
+//            log.info("Flipped it: {}", sha1);
+//            return sha1 + 'e';
+//        }
+//        else {
+//            return sha1;
+//        }
 
-		if (Pattern.matches("^[\\d{3}\\d+].*" , file.getName())
-				&& ctr < serviceConfig.getMaximumRedeliveries() - 1)
-		{
-			sha1 = sha1 + 'e';
-			log.info("Flipped it: {}", sha1);
-		}
+//        if (Pattern.matches("^[\\d{3}\\d+].*" , file.getName())
+//				&& ctr < serviceConfig.getMaximumRedeliveries() - 1)
+//		{
+//            sha1 = sha1 + 'e';
+//            log.info("Flipped it: {}", sha1);
+//		}
 	}
 }

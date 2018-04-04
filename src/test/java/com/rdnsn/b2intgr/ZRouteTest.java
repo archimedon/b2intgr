@@ -80,7 +80,7 @@ public class ZRouteTest extends CamelTestSupport {
     public static final String listBucketsService       = "/list";
     public static final String listFileNamesService     = "/ls";
     public static final String listFileVersService      = "/lsvers";
-//    public static final String uploadFileUriService     = "/uptest/{bucketId}/{author}/{destDir}";
+    //    public static final String uploadFileUriService     = "/uptest/{bucketId}/{author}/{destDir}";
     public static final String uploadFileUriService     = "/upload/{bucketId}/{author}/{destDir}";
 
 
@@ -196,7 +196,7 @@ public class ZRouteTest extends CamelTestSupport {
 
         final String token = authAgent.getAuthResponse().getAuthorizationToken();
 
-        template.start();
+//        template.start();
         final Message responseOut = template.send(getHttp4Proto("http://localhost:8080/cloudfs/api/v1/lsvers"), (exchange) -> {
 
             // Ensure Empty
@@ -205,31 +205,31 @@ public class ZRouteTest extends CamelTestSupport {
 
             exchange.getIn().setHeader(Constants.AUTHORIZATION, token);
             exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-            exchange.getIn().setBody("{\"bucketId\": \"2ab327a44f788e635ef20613\"," +
-                    "\"startFileName\" : \"\"," +
-                    "\"prefix\" : \"visa/dest/dir/bc/\"," +
-                    "\"delimiter\" : \"/\"," +
-                    "\"maxFileCount\" : 3}");
-//            exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, body));
+            exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, body));
 
         }).getOut();
 
 
-        System.err.println("responseOut: " + responseOut.toString());
-        System.err.println("responseOut.getHeaders:\n" + responseOut.getHeaders());
-//        Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+        log.error("responseOut Headers:\n" +  responseOut.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
 
-//        assertNotNull("An HttpStatus is expected", code);
-//        assertEquals("HttpStatus 200 expected",HttpStatus.SC_OK, code.longValue());
-//
-//        Map<String, List<Map<String, Object>>> filesWrap = JsonHelper.coerceClass(objectMapper, responseOut, HashMap.class);
-//        List<Map<String, Object>> files = List.class.cast(filesWrap.get("files"));
-//        Map<String, Object> fileItem = files.get(0);
-//
-//
-//        assertNotNull("files List expected", files);
-////        assertListSize(files, numberOfBuckets);
-//        assertTrue(((String)fileItem.get("fileName")).startsWith((String) body.get("prefix")));
+        Integer code = responseOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+
+        assertNotNull("An HttpStatus is expected", code);
+        assertEquals("HttpStatus 200 expected",HttpStatus.SC_OK, code.longValue());
+
+        String rbody = responseOut.getBody(String.class);
+        System.out.println("rbody:\n" + rbody);
+        Map<String, List<Map<String, Object>>> filesWrap = JsonHelper.coerceClass(objectMapper, rbody, HashMap.class);
+        List<Map<String, Object>> files = List.class.cast(filesWrap.get("files"));
+        Map<String, Object> fileItem = files.get(0);
+
+
+        assertNotNull("files List expected", files);
+//        assertListSize(files, numberOfBuckets);
+        String fname = (String)fileItem.get("fileName");
+        String prefix = (String) body.get("prefix");
+        log.debug("flname: {}\nprefix: {}", fname, prefix);
+        assertTrue(fname.startsWith(prefix));
 
     }
 
@@ -272,8 +272,9 @@ public class ZRouteTest extends CamelTestSupport {
         assertEquals(serviceConfig.getRemoteAccountId(), bucket.get("accountId"));
     }
 
-    // Test
+    @Test
     public void testUploadSmall() throws IOException {
+        testListBuckets();
         String basePath = getClass().getResource("/test-samples").getPath();
 //        Path filePath = Paths.get(basePath, "/small.file");
         Path filePath = Paths.get(basePath, "/1024b-file.txt");
@@ -285,7 +286,7 @@ public class ZRouteTest extends CamelTestSupport {
                         .replace("{author}", "testUser")
                         .replace("{destDir}", "testing");
 
-        BasicHttpClient client = new BasicHttpClient(uploadUrl);
+        BasicHttpClient client = new BasicHttpClient(uploadUrl).streamData();
 
         client.addInput(filePath.toFile(), "1024b");
 
@@ -299,28 +300,34 @@ public class ZRouteTest extends CamelTestSupport {
 //        log.info(" uploadResponse: '{}'", uploadResponse);
     }
 
-    // Test
+    @Test
     public void testUploadLarge() throws IOException {
+        testListBuckets();
         String basePath = getClass().getResource("/test-samples").getPath();
-        Path filePath = Paths.get(basePath, "/1024b-file");
+//        Path filePath = Paths.get(basePath, "/small.file");
+        Path filePath = Paths.get(basePath, "/68b-img.gif");
 
-
-
+        if (! filePath.toFile().exists()) {
+            throw new IOException(("The file: '" + filePath + "' does not exist"));
+        }
         final String uploadUrl = RESTAPI_ENDPOINT.toString() +
-            uploadFileUriService
-                .replace("{bucketId}", "2ab327a44f788e635ef20613")
-                .replace("{author}", "testUser")
-                .replace("{destDir}", "testing");
+                uploadFileUriService
+                        .replace("{bucketId}", "2ab327a44f788e635ef20613")
+                        .replace("{author}", "testUser")
+                        .replace("{destDir}", "testing");
 
-        BasicHttpClient client = new BasicHttpClient(uploadUrl);
+        BasicHttpClient client = new BasicHttpClient(uploadUrl).streamData();
 
-        client
-//            .streamData()
-            .addInput(filePath.toFile(), "uptest/test/1");
+        client.addInput(filePath.toFile(), "68b");
+
 
         String str = client.post();
         log.error("reso:\n{}", str);
-
+//        UploadFileResponse uploadResponse =
+//                JsonHelper.coerceClass(objectMapper, str, UploadFileResponse.class);
+//
+//        assertNotNull("fileId expected", uploadResponse.getFileId());
+//        log.info(" uploadResponse: '{}'", uploadResponse);
     }
 
     @Test()
@@ -329,12 +336,12 @@ public class ZRouteTest extends CamelTestSupport {
         AuthResponse remoteAuth = ZRouteTest.authAgent.getAuthResponse();
 
         getUploadUrlResponse = objectMapper.readValue(
-            template.send( getHttp4Proto(remoteAuth.resolveGetUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS, (Exchange exchange) -> {
-                exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
-                exchange.getIn().setHeader(Constants.AUTHORIZATION, remoteAuth.getAuthorizationToken());
-                exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, ImmutableMap.<String, String>of("bucketId", serviceConfig.getRemoteBucketId())));
-            }).getOut().getBody(String.class),
-            GetUploadUrlResponse.class);
+                template.send( getHttp4Proto(remoteAuth.resolveGetUploadUrl()) + ZRouteBuilder.HTTP4_PARAMS, (Exchange exchange) -> {
+                    exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
+                    exchange.getIn().setHeader(Constants.AUTHORIZATION, remoteAuth.getAuthorizationToken());
+                    exchange.getIn().setBody(JsonHelper.objectToString(objectMapper, ImmutableMap.<String, String>of("bucketId", serviceConfig.getRemoteBucketId())));
+                }).getOut().getBody(String.class),
+                GetUploadUrlResponse.class);
 
         assertNotNull("Response expected", getUploadUrlResponse);
         assertNotNull("AuthorizationToken expected", getUploadUrlResponse.getAuthorizationToken());

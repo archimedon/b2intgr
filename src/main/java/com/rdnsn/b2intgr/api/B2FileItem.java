@@ -24,8 +24,6 @@ public class B2FileItem extends B2SimpleFile {
 
     @JsonProperty
     protected Map<String, Object> fileInfo;
-//    // @see Setter
-//    protected String author;
 
     @JsonProperty
     protected long size;
@@ -50,10 +48,6 @@ public class B2FileItem extends B2SimpleFile {
         this.action = action;
         return this;
     }
-
-//    public String getAuthor() {
-//        return author;
-//    }
 
     public long getSize() {
         return size;
@@ -81,13 +75,6 @@ public class B2FileItem extends B2SimpleFile {
         this.fileInfo = fileInfo;
         return this;
     }
-
-//    // "fileInfo": { "author": "unknown"},
-//    @JsonProperty(value="fileInfo", access=JsonProperty.Access.WRITE_ONLY)
-//    public void setAuthor(Map<String, String> fileInfo) {
-//        this.fileInfo = fileInfo;
-//    }
-
 
     @Override
     public String toString() {

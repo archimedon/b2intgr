@@ -14,22 +14,22 @@ public class MailConfig {
 
     @NotNull
     @JsonProperty
-    private String password = "r3664370n";
+    private String password;
 
     @NotNull
     @JsonProperty
-    private String host = "smtp.gmail.com";
+    private String host;
 
     @JsonProperty
-    private int port = 465;
-
-    @NotNull
-    @JsonProperty
-    private String username = "a2zlangmgr@gmail.com";
+    private int port;
 
     @NotNull
     @JsonProperty
-    private String recipients = "ronniedz1s@yahoo.com";
+    private String username;
+
+    @NotNull
+    @JsonProperty
+    private String recipients;
 
 
     public MailConfig() {

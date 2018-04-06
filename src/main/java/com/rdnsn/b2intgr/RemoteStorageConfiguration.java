@@ -1,42 +1,28 @@
 package com.rdnsn.b2intgr;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Formatter;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.validation.constraints.NotNull;
-
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
+
+import javax.validation.constraints.NotNull;
+import java.util.HashMap;
+import java.util.Map;
 
 @JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
 public class RemoteStorageConfiguration {
 
 	@NotNull
 	@JsonProperty
-	private String accountId = "a374f8e3e263";
+	private String accountId;
 
 	@NotNull
 	@JsonProperty
-	private String authenticationUrl = "https://api.backblazeb2.com/b2api/v1/b2_authorize_account";
+	private String authenticationUrl; // "https://api.backblazeb2.com/b2api/v1/b2_authorize_account"
 
 	@NotNull
 	@JsonProperty
-	private String applicationKey = "0012091458045a46b01b14df849c659aebb820a53c";
+	private String applicationKey;
 
 
 
@@ -53,7 +39,7 @@ public class RemoteStorageConfiguration {
 
     */
     // Only used in testing.
-    // BucketId and/or Name should be sent in request when required
+    // BucketId and/or Name should be sent in request where required
     @NotNull
     @JsonProperty
     private Map<String, String> bucket = new HashMap<String, String>();

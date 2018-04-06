@@ -1,39 +1,15 @@
 package com.rdnsn.b2intgr;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import javax.validation.constraints.NotNull;
-
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.rdnsn.b2intgr.util.JsonHelper;
-import org.apache.commons.beanutils.BeanUtils;
-import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import javax.validation.constraints.NotNull;
+import java.util.Base64;
 
 @JsonAutoDetect(fieldVisibility= JsonAutoDetect.Visibility.ANY)
 public class CloudFSConfiguration {
-    private static final Logger LOG = LoggerFactory.getLogger(CloudFSConfiguration.class);
-
-    private static final String ENV_PREFIX = "B2I_";
-    private static final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";
 
     /**
      * Configure the Remote server
@@ -60,11 +36,11 @@ public class CloudFSConfiguration {
 
     @NotNull
     @JsonProperty
-    private String docRoot = "/tmp/appRoot";
+    private String docRoot;
 
     @NotNull
     @JsonProperty
-    private String protocol = "http";
+    private String protocol;
 
     @NotNull
     @JsonProperty
@@ -72,7 +48,7 @@ public class CloudFSConfiguration {
 
     @NotNull
     @JsonProperty
-    private String adminEmail = "ronniedz@gmail.com";
+    private String adminEmail;
 
     @NotNull
     @JsonProperty

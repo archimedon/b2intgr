@@ -28,8 +28,6 @@ public class FilePart  implements Comparable<FilePart> {
     @JsonProperty
     private long start;
 
-//    private int bufSize;
-
     @JsonProperty
     private boolean unread = true;
 
@@ -197,13 +195,4 @@ public class FilePart  implements Comparable<FilePart> {
     public int compareTo(FilePart other) {
         return Integer.compare(this.partNumber, other.getPartNumber());
     }
-
-//    public int getBufSize() {
-//        return bufSize;
-//    }
-//
-//    public FilePart setBufSize(int bufSize) {
-//        this.bufSize = bufSize;
-//        return this;
-//    }
 }

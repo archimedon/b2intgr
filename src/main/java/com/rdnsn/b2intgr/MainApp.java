@@ -54,17 +54,12 @@ public class MainApp {
     private final String configFilePath = "/config.json";
 
     public MainApp(String[] args) throws IOException {
-//        if ( args.length > 1 ) {
-//            configFilePath = "/" + args[0];
-//        }
+
         this.objectMapper = new ObjectMapper();
         objectMapper.configure(MapperFeature.ACCEPT_CASE_INSENSITIVE_PROPERTIES, true);
         objectMapper.configure(MapperFeature.USE_ANNOTATIONS, true);
         objectMapper.configure(JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
         objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
-
-//        this.serviceConfig = getSettings();
-//        String confFile = readStream(getClass().getResourceAsStream(configFilePath));
 
         this.serviceConfig = new Configurator(objectMapper).getConfiguration();
 
@@ -152,15 +147,6 @@ public class MainApp {
 
         zRouteBuilder.setBucketMap(bucketIdNameMap);
     }
-
-//    private String readStream(InputStream stream) throws IOException {
-//        ByteArrayOutputStream into = new ByteArrayOutputStream();
-//        byte[] buf = new byte[4096];
-//
-//        for (int n = -1; 0 < (n = stream.read(buf)); into.write(buf, 0, n)){}
-//        into.close();
-//        return into.toString();
-//    }
 
     private void writeConnectionString() throws Exception {
         LOG.info("Listening on: " +

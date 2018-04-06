@@ -1,24 +1,19 @@
 package com.rdnsn.b2intgr;
 
-import org.apache.camel.util.IOHelper;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.restlet.data.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.misc.IOUtils;
 
-import java.awt.*;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * A bare bones HTTP client using low-level java URLConnection API.

@@ -1,17 +1,17 @@
 package com.rdnsn.b2intgr.processor;
 
-import static com.rdnsn.b2intgr.route.ZRouteBuilder.getHttp4Proto;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Paths;
-import java.util.Map;
-import java.util.Optional;
-import java.util.regex.Pattern;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.CloudFSConfiguration;
+import com.rdnsn.b2intgr.api.AuthResponse;
 import com.rdnsn.b2intgr.api.ErrorObject;
+import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
+import com.rdnsn.b2intgr.api.UploadFileResponse;
 import com.rdnsn.b2intgr.exception.B2BadRequestException;
 import com.rdnsn.b2intgr.exception.UploadException;
+import com.rdnsn.b2intgr.model.UserFile;
+import com.rdnsn.b2intgr.route.ZRouteBuilder;
+import com.rdnsn.b2intgr.util.Constants;
 import com.rdnsn.b2intgr.util.JsonHelper;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
@@ -22,15 +22,14 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableMap;
-import com.rdnsn.b2intgr.CloudFSConfiguration;
-import com.rdnsn.b2intgr.util.Constants;
-import com.rdnsn.b2intgr.api.AuthResponse;
-import com.rdnsn.b2intgr.api.GetUploadUrlResponse;
-import com.rdnsn.b2intgr.api.UploadFileResponse;
-import com.rdnsn.b2intgr.model.UserFile;
-import com.rdnsn.b2intgr.route.ZRouteBuilder;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Paths;
+import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Pattern;
+
+import static com.rdnsn.b2intgr.route.ZRouteBuilder.getHttp4Proto;
 
 
 
@@ -40,8 +39,7 @@ public class UploadProcessor implements Processor {
 	
 	private final ObjectMapper objectMapper;
 	private final CloudFSConfiguration serviceConfig;
-//	private final String bucketMap;
-    
+
 	public UploadProcessor(CloudFSConfiguration serviceConfig, ObjectMapper objectMapper) {
 		this.objectMapper = objectMapper;
 		this.serviceConfig = serviceConfig;
@@ -81,22 +79,6 @@ public class UploadProcessor implements Processor {
 
         if (log.isDebugEnabled()) {
             userFile.setSha1(corruptAHash(sha1, exchange, file));
-//            Integer ctr = null;
-//
-//            if (null == (ctr = exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class))) {
-//                ctr = 0;
-//            }
-//
-//            log.debug("Redelivery counter: " + ctr);
-//
-//            if (Pattern.matches("^\\d{4}.+?\\..+", file.getName())
-//                && ctr < serviceConfig.getMaximumRedeliveries() - 1
-//            ) {
-//                sha1 = sha1 + 'e';
-//                userFile.setSha1(sha1);
-//                log.debug("pattern matches: '{}'", file.getName());
-//                log.debug("Flipped '{}' sha: {}", file.getName(), userFile.getSha1());
-//            }
         }
 
         final Message responseOut = producer.send(getHttp4Proto(uploadAuth.getUploadUrl()) + "?throwExceptionOnFailure=false&okStatusCodeRange=100", innerExchg -> {
@@ -153,33 +135,22 @@ public class UploadProcessor implements Processor {
 
 	/**
 	 * Only used in testing. To force an error response from Backblaze.
-	 * Triggered by file names that start with 4 numbers
+	 * Triggered by file names that start with '123abc'
 	 *
 	 * @param sha1
 	 * @param exchange
 	 * @param file
 	 */
 	private String corruptAHash(String sha1, Exchange exchange, File file) {
-        return sha1;
-//
-//        int ctr = Optional.of(exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class)).orElse(-1);
-//		log.info("Redelivery counter: " + ctr);
-//
-//        if (Pattern.matches("^123abc.*?\\..+", file.getName())
-//                && ctr < serviceConfig.getMaximumRedeliveries() - 1
-//                ) {
-//            log.info("Flipped it: {}", sha1);
-//            return sha1 + 'e';
-//        }
-//        else {
-//            return sha1;
-//        }
-
-//        if (Pattern.matches("^[\\d{3}\\d+].*" , file.getName())
-//				&& ctr < serviceConfig.getMaximumRedeliveries() - 1)
-//		{
-//            sha1 = sha1 + 'e';
-//            log.info("Flipped it: {}", sha1);
-//		}
+        Integer ctr = exchange.getIn().getHeader(Exchange.REDELIVERY_COUNTER, Integer.class);
+        if (Pattern.matches("^123abc.*?\\..+", file.getName())
+                && (ctr == null ||ctr < serviceConfig.getMaximumRedeliveries() - 1)
+                ) {
+            log.info("Flipped it: {}", sha1);
+            return sha1 + 'e';
+        }
+        else {
+            return sha1;
+        }
 	}
 }

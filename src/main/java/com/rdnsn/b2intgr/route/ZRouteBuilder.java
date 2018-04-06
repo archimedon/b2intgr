@@ -219,7 +219,7 @@ public class ZRouteBuilder extends RouteBuilder {
             exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
             exchange.getOut().setBody(objectMapper.writeValueAsString(ImmutableMap.of(
                 "accountId", auth.getAccountId(),
-                "bucketTypes", Arrays.asList(Constants.B2_BUCKET_TYPES)
+                "bucketTypes", ImmutableList.of("allPrivate", "allPublic")
             )));
         };
 

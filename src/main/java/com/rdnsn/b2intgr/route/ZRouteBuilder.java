@@ -93,6 +93,13 @@ public class ZRouteBuilder extends RouteBuilder {
 
     private MirrorMap<String, String> bucketMap;
 
+
+
+
+    public static URL RESTAPI_HOST;
+    public static URL RESTAPI_ENDPOINT;
+
+
     // // TODO: 2/13/18 url-encode the downloadURL
     public ZRouteBuilder(ObjectMapper objectMapper, CloudFSConfiguration serviceConfig, AuthAgent authAgent) throws URISyntaxException {
         super();
@@ -112,6 +119,14 @@ public class ZRouteBuilder extends RouteBuilder {
             ),
             null
         );
+
+        try {
+            this.RESTAPI_HOST = new URL(serviceConfig.getProtocol(), serviceConfig.getHost(), serviceConfig.getPort(), "/");
+            this.RESTAPI_ENDPOINT = new URL(RESTAPI_HOST, serviceConfig.getContextUri());
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+        }
+
 
         // enable Jackson json type converter
         getContext().getGlobalOptions().put("CamelJacksonEnableTypeConverter", "true");
@@ -146,8 +161,9 @@ public class ZRouteBuilder extends RouteBuilder {
         };
 
         final AggregationStrategy fileResponseAggregator = (Exchange original, Exchange resource) -> {
-            log.error("fileResponseAggregator Headers:\n" +  resource.getIn().getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
+            log.debug("fileResponseAggregator Headers:\n" +  resource.getIn().getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
             String body = resource.getIn().getBody(String.class);
+//            log.debug("fileResponseAggregator body:\n" +  body);
 
             final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
 
@@ -174,7 +190,11 @@ public class ZRouteBuilder extends RouteBuilder {
                         "file",
                         getBucketMap().getObject(bucketId), file.getFileName())
                 ));
-                
+
+                log.debug("bucketId: {}//{}//{}" ,
+                        authAgent.getAuthResponse().getDownloadUrl(),
+                        "file",
+                        getBucketMap().getObject(bucketId));
             }
 
             original.getOut().removeHeader(Constants.AUTHORIZATION);
@@ -183,9 +203,9 @@ public class ZRouteBuilder extends RouteBuilder {
 
         final Processor createPostFileList = (exchange) -> {
             ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
-//            final AuthResponse auth = exchange.getIn().getHeader(Constants.AUTH_RESPONSE, AuthResponse.class);
-//
-//            ListFilesRequest lfr = exchange.getIn().getBody(ListFilesRequest.class);
+
+            log.debug("got LFR: {}", lfr.toString());
+
             exchange.getOut().setHeader(Constants.AUTHORIZATION, exchange.getIn().getHeader(Constants.AUTHORIZATION, String.class));
             exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
             exchange.getOut().setBody(lfr);
@@ -198,9 +218,8 @@ public class ZRouteBuilder extends RouteBuilder {
             exchange.getOut().setHeader(Constants.AUTHORIZATION, auth.getAuthorizationToken());
             exchange.getOut().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
             exchange.getOut().setBody(objectMapper.writeValueAsString(ImmutableMap.of(
-                    "accountId", auth.getAccountId(),
-//                    "bucketTypes", ImmutableList.of(Constants.B2_BUCKET_TYPES)
-                    "bucketTypes", ImmutableList.of("allPrivate", "allPublic")
+                "accountId", auth.getAccountId(),
+                "bucketTypes", Arrays.asList(Constants.B2_BUCKET_TYPES)
             )));
         };
 
@@ -235,20 +254,16 @@ public class ZRouteBuilder extends RouteBuilder {
         rest.post("/uptest/{bucketId}/{author}/{destDir}")
                 .consumes("multipart/form-data")
                 .route().process(exchange -> {
-//
-            System.err.println("\nHeaders: " +  exchange.getIn().getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
-//
-//            System.err.println("\n");
-//
             String sent = IOUtils.toString(exchange.getIn().getBody(InputStream.class), StandardCharsets.UTF_8);
-System.err.println("\n\n-------------------------------\n");
-System.err.println(sent);
-System.err.println("\n-------------------------------\n\n");
 
-//            log.debug("headers: {}" + exchange.getIn().getHeaders().entrySet());
-//            log.debug("upl headers: {}" +, exchange.getIn().getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
+            // RAW DUMP
+//            System.err.println("\n\n-------------------------------\n");
+//            System.err.println(sent);
+//            System.err.println("\n-------------------------------\n\n");
+//            System.err.println("upl headers:\n\t" + exchange.getIn().getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
 
-            exchange.getOut().setBody(sent);
+            // Echo
+            exchange.getOut().copyFromWithNewBody(exchange.getIn(), sent);
         });
 
 
@@ -315,48 +330,44 @@ System.err.println("\n-------------------------------\n\n");
                 .errorHandler(noErrorHandler())
 //                .setHeader(Constants.USER_FILE, body())
                 .to( "direct:start_large_upload", "direct:make_upload_parts", "direct:finish_large_file")
-
-
-                .log(LoggingLevel.DEBUG, log, body().toString())
+//                .log(LoggingLevel.DEBUG, log, body().toString())
 //                .process(new PersistMapping())
                 .end();
 
 
         from("direct:make_upload_parts")
-                .split(new ChunkFileExpression(),  (Exchange original, Exchange resource) -> {
+            .split(new ChunkFileExpression(),  (Exchange original, Exchange resource) -> {
 
 
-                    if (original == null ) {
-
-                        FilePart filePart = resource.getIn().getBody(FilePart.class);
-                        Integer numParts = resource.getIn().getHeader("numParts", Integer.class);
-
-
-                        log.debug("resrc Body: {}", filePart);
-                        log.debug("resourceIN numParts: {}" , numParts);
-
-                        FilePart[] parts = new FilePart[numParts];
-                        parts[filePart.getPartNumber() - 1] = filePart;
-
-                        resource.getIn().setBody(parts);
-
-                        return resource;
-                    }
+                if (original == null ) {
 
                     FilePart filePart = resource.getIn().getBody(FilePart.class);
-                    FilePart[] parts = original.getIn().getBody(FilePart[].class);
+                    Integer numParts = resource.getIn().getHeader("numParts", Integer.class);
 
+
+                    log.debug("filePart: {}", filePart);
+                    log.debug("Resource.IN -> numParts: {}" , numParts);
+
+                    FilePart[] parts = new FilePart[numParts];
                     parts[filePart.getPartNumber() - 1] = filePart;
-                    original.getOut().copyFromWithNewBody(original.getIn(), parts);
-//                    parts.add(filePart);
 
-                    log.debug("filePart: {}" , filePart);
-                    return original;
-                })
+                    resource.getIn().setBody(parts);
+
+                    return resource;
+                }
+
+                FilePart filePart = resource.getIn().getBody(FilePart.class);
+                FilePart[] parts = original.getIn().getBody(FilePart[].class);
+
+                parts[filePart.getPartNumber() - 1] = filePart;
+                original.getOut().copyFromWithNewBody(original.getIn(), parts);
+
+                return original;
+            })
 //                .shareUnitOfWork()
 //                .parallelProcessing()
-                    .to("direct:upload_part")
-                .end();
+            .to("direct:upload_part")
+        .end();
 
 
         from("direct:upload_part")
@@ -424,7 +435,7 @@ System.err.println("\n-------------------------------\n\n");
 
 
                         code = uploaderOut.getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-                        log.info("uploaderOut RESPONSE_CODE:{ '{}' partFile: '{}'}", code, partFile);
+                        log.debug("uploaderOut RESPONSE_CODE:{ '{}' partFile: '{}'}", code, partFile);
 
                         if (code != null && HttpStatus.SC_OK == code) {
 
@@ -526,6 +537,7 @@ System.err.println("\n-------------------------------\n\n");
                         } else {
                             ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, uploaderOut, ErrorObject.class);
                             exchange.getOut().copyFromWithNewBody(uploaderOut, errorObject);
+
                             log.error("errorObject: {} ", errorObject);
                             throw new UploadException("Response code fail (" + code + ") finishUploadBody '" + finishUploadBody + "' not uploaded");
                         }
@@ -544,6 +556,7 @@ System.err.println("\n-------------------------------\n\n");
                     getHttp4Proto(authAgent.getApiUrl()) + ppath_list_buckets, (Exchange original, Exchange resource) -> {
 
                             final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
+                            log.error("HttpStatus: {} ", code);
 
                             if (code == null || HttpStatus.SC_OK != code) {
                                 ErrorObject errorObject = JsonHelper.coerceClass(objectMapper, resource.getIn(), ErrorObject.class);
@@ -658,9 +671,11 @@ System.err.println("\n-------------------------------\n\n");
                 log.info("ppath: {} ", ppath);
 
                 try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
-                    String needleKey = new URL(MainApp.RESTAPI_HOST, uri).toExternalForm();
+                    String needleKey = new URL(ZRouteBuilder.RESTAPI_HOST, uri).toExternalForm();
                     ProxyUrl actual = proxyMapUpdater.getProxyUrl(
                         new ProxyUrl().setProxy(ppath)
+                            // TODO: 4/5/18 Add bucketId to the entire Proxy lookup
+                            // .setBucketId()
                     );
 
                     log.debug("Found proxy-Actual: {}", actual);
@@ -738,7 +753,7 @@ System.err.println("\n-------------------------------\n\n");
 //                    log.debug("postedData Out: {} ", original.getOut().getBody(String.class));
 
                     final Integer code = resource.getIn().getHeader(Exchange.HTTP_RESPONSE_CODE, Integer.class);
-                    log.debug("code {}", code);
+                    log.debug("HttpStatus: {}", code);
 
                     FileResponse postedData = new FileResponse();
 
@@ -770,13 +785,6 @@ System.err.println("\n-------------------------------\n\n");
             str = m.replaceFirst("$1" + "4$2");
         }
         return str;
-    }
-
-    public static String http4Suffix(String url) {
-        return url + "?okStatusCodeRange=100-999&throwExceptionOnFailure=true"
-                + "&disableStreamCache=true";
-//		+ "&transferException=false&"
-//		+ "useSystemProperties=true";
     }
 
     public void setBucketMap(MirrorMap<String,String> bucketMap) {
@@ -832,7 +840,7 @@ System.err.println("\n-------------------------------\n\n");
                 .post(listFileNamesService).type(ListFilesRequest.class).outType(ListFilesResponse.class)
                 .description("List files")
                 .bindingMode(RestBindingMode.auto)
-//                .consumes("application/json")
+                .consumes("application/json")
                 .produces("application/json")
                 .to("direct:rest.list_files")
 
@@ -877,148 +885,115 @@ System.err.println("\n-------------------------------\n\n");
         public void process(Exchange exchange) throws B2BadRequestException {
 
             final Message messageIn = exchange.getIn();
-log.error("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
+            log.debug("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
             MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
 
 
-//                try {
-                    InputRepresentation representation = new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
+            InputRepresentation representation = new InputRepresentation(messageIn.getBody(InputStream.class), mediaType);
 
-                    log.error("representation: {}", representation);
+            log.debug("representation: {}", representation);
 
             String contextId = null;
-            try {
-                contextId = URLDecoder.decode(messageIn.getHeader(Constants.TRNSNT_FILE_DESTDIR, String.class), Constants.UTF_8);
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
-            }
-
-            if (contextId == null ) {
-                        contextId = "";
-                    }
-                    else {
-                        contextId = contextId.replaceAll(serviceConfig.getCustomSeparator(), "/");
-                    }
-
             String bucketId = null;
-            try {
-                bucketId = URLDecoder.decode(messageIn.getHeader("bucketId", String.class), Constants.UTF_8);
-            } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
-            }
             String author = null;
             try {
+                contextId = URLDecoder.decode(messageIn.getHeader("destDir", String.class), Constants.UTF_8);
+                bucketId = URLDecoder.decode(messageIn.getHeader("bucketId", String.class), Constants.UTF_8);
                 author = URLDecoder.decode(messageIn.getHeader("author", String.class), Constants.UTF_8);
+
+                if (contextId == null) {
+                    contextId = "";
+                } else {
+                    contextId = contextId.replaceAll(serviceConfig.getCustomSeparator(), "/");
+                }
+
             } catch (UnsupportedEncodingException e) {
-                e.printStackTrace();
+                throw makeBadRequestException(e, exchange, "Error parsing input", 500);
             }
 
-            log.error("bucketId: {}", bucketId);
-                    log.error("author: {}", author);
-
-//                    if (contextId.contains("/")) {
-//                        List<String> parts = Arrays.asList(contextId.split("/"));
-//                        author = parts.get(0);
-//                        contextId = String.join("/", parts.subList(1, parts.size()));
-//                    }
+            log.debug("bucketId: {}", bucketId);
+            log.debug("author: {}", author);
 
             List<FileItem> items = null;
             try {
                 items = new RestletFileUpload(new DiskFileItemFactory()).parseRepresentation(representation);
             } catch (FileUploadException e) {
-                e.printStackTrace();
+                throw makeBadRequestException(e, exchange, "Error parsing input", 500);
             }
 
             if (!items.isEmpty()) {
 
-                        UploadData uploadData = new UploadData();
+                UploadData uploadData = new UploadData();
 
-                        for (FileItem item : items) {
-                            log.error("getContentType: {}", item.getContentType());
-                            log.error("getName: {}", item.getName());
-                            log.error("getFieldName: {}", item.getFieldName());
-                            log.error("getSize: {}", item.getSize());
-                            log.error("toString: {}", item.toString());
+                for (FileItem item : items) {
+                    log.debug("getContentType: {}", item.getContentType());
+                    log.debug("getName: {}", item.getName());
+                    log.debug("getFieldName: {}", item.getFieldName());
+                    log.debug("getSize: {}", item.getSize());
+                    log.debug("toString: {}", item.toString());
 
-                            if (item.isFormField()) {
-                                uploadData.putFormField(item.getFieldName(), item.getString());
-                            } else {
-                                String pathFromUser = contextId + File.separatorChar + item.getFieldName();
-                                String partialPath = null;
-                                try {
-                                    partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
-                                            .replaceAll("%2F", "/");
-                                } catch (UnsupportedEncodingException e) {
-                                    e.printStackTrace();
-                                }
-
-                                log.error("partialPath: {}", partialPath);
-                                Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
-                                log.error("destination: {}", destination);
-
-
-                                try {
-                                    Files.createDirectories(destination.getParent());
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-
-                                try {
-                                    Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                                log.error("copied: {} to ", item.getFieldName(),  destination);
-
-                                UserFile userFile = new UserFile(destination)
-                                        .setContentType(item.getContentType())
-                                        .setBucketId(bucketId)
-                                        .setRelativePath(partialPath);
-
-                                log.error("userFile: {}", userFile);
-
-                                userFile.setAuthor(author);
-
-//                                userFile.setDownloadUrl(buildURLString(MainApp.RESTAPI_ENDPOINT, "file", partialPath));
-
-//                                log.debug("userFile.getDownloadUrl: {}");
-
-//                                item.delete();
-                                uploadData.addFile(userFile);
-                            }
+                    if (item.isFormField()) {
+                        uploadData.putFormField(item.getFieldName(), item.getString());
+                    } else {
+                        String pathFromUser = contextId + File.separatorChar + item.getFieldName();
+                        String partialPath = null;
+                        try {
+                            partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
+                                    .replaceAll("%2F", "/");
+                        } catch (UnsupportedEncodingException e) {
+                            e.printStackTrace();
                         }
-                        try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
-                            uploadData.getFiles().forEach(aUserFile -> {
-                                aUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
-                                        new ProxyUrl()
-                                                .setProxy(aUserFile.getRelativePath())
-                                                .setFileId(aUserFile.getFileId())
-                                                .setSha1(aUserFile.getSha1())
-                                                .setBucketId(aUserFile.getBucketId())
-                                                .setContentType(aUserFile.getContentType())
-                                                .setSize(aUserFile.getSize())
-                                ));
-                            });
-                        } catch (Exception e) {
-                            throw makeBadRequestException(e, exchange, "DB update error." , 500);
+
+                        log.debug("partialPath: {}", partialPath);
+                        Path destination = Paths.get(serviceConfig.getDocRoot() + File.separatorChar + partialPath);
+                        log.debug("destination: {}", destination);
+
+
+                        try {
+                            Files.createDirectories(destination.getParent());
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-                        exchange.getOut().setBody(uploadData);
+
+                        try {
+                            Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        log.debug("copied: {} to ", item.getFieldName(), destination);
+
+                        UserFile userFile = new UserFile(destination)
+                                .setContentType(item.getContentType())
+                                .setBucketId(bucketId)
+                                .setRelativePath(partialPath);
+
+                        log.debug("userFile: {}", userFile);
+
+                        userFile.setAuthor(author);
+
+                        userFile.setDownloadUrl(buildURLString(ZRouteBuilder.RESTAPI_ENDPOINT, "file", partialPath));
+                        uploadData.addFile(userFile);
+
+                        item.delete();
                     }
-//                } catch (Exception e) {
-//                    throw makeBadRequestException(e, exchange, "Incomplete Request" , 400);
-//                }
-
-//            else {
-
-
-//                log.debug("No media type in Header");
-//                exchange.getOut().setBody(new ErrorObject()
-//                    .setMessage("No media type in Header")
-//                    .setCode("Null media not allowed")
-//                    .setStatus(400));
-//                exchange.setException(new Throwable("No media type in Header"));
-//
-//            }
+                }
+                try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
+                    uploadData.getFiles().forEach(aUserFile -> {
+                        aUserFile.setTransientId((Long) proxyMapUpdater.saveOrUpdateMapping(
+                                new ProxyUrl()
+                                        .setProxy(aUserFile.getRelativePath())
+                                        .setFileId(aUserFile.getFileId())
+                                        .setSha1(aUserFile.getSha1())
+                                        .setBucketId(aUserFile.getBucketId())
+                                        .setContentType(aUserFile.getContentType())
+                                        .setSize(aUserFile.getSize())
+                        ));
+                    });
+                } catch (Exception e) {
+                    throw makeBadRequestException(e, exchange, "DB update error.", 400);
+                }
+                exchange.getOut().setBody(uploadData);
+            }
         }
     }
 

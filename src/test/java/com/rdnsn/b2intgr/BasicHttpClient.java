@@ -1,10 +1,15 @@
 package com.rdnsn.b2intgr;
 
 import org.apache.camel.util.IOHelper;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.restlet.data.MediaType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import sun.misc.IOUtils;
 
+import java.awt.*;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +27,9 @@ import java.util.stream.Collectors;
  *
  */
 public class BasicHttpClient {
+    private Logger log = LoggerFactory.getLogger(getClass());
 
+    
     private static final String charset = "UTF-8";
     private static final String CR = "\r\n";
     private static final String prefix =  "--";
@@ -91,13 +98,13 @@ public class BasicHttpClient {
                 final File file = field.getLeft();
                 final String fieldName = field.getRight();
 
-//                try (FileInputStream fileStream = new FileInputStream(file)) {
+//              try (FileInputStream fileStream = new FileInputStream(file)) {
                 try  {
 
                     // Write Payload
                     writer.append(boundaryStr);
                     writer.append(CR);
-                    writer.append(makePayloadHeader(fieldName, URLEncoder.encode(file.getName(), charset)));
+                    writer.append(makePayloadHeader(fieldName, file));
                     writer.append(CR);
                     writer.append(CR);
                     writer.flush();
@@ -125,12 +132,7 @@ public class BasicHttpClient {
 
         // checks server's status code first
         int status = http.getResponseCode();
-//        log.error("responseOut Headers:\n" +  responseOut.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
-        System.err.println("getResponseMessage:\n" +  http.getResponseMessage());
-        System.err.println("getHeaderFields:\n" +  http.getHeaderFields());
-
-
-
+        log.debug("getResponseHeaderFields:\n" +  http.getHeaderFields());
 
         if (status == HttpURLConnection.HTTP_OK) {
             BufferedReader reader = new BufferedReader(new InputStreamReader(http.getInputStream()));
@@ -141,18 +143,44 @@ public class BasicHttpClient {
             reader.close();
             http.disconnect();
         } else {
-            System.err.println("getErrorStream:\n" + org.apache.commons.io.IOUtils.toString(http.getErrorStream(), charset));
+            log.debug("getErrorStream:\n" + org.apache.commons.io.IOUtils.toString(http.getErrorStream(), charset));
             throw new IOException("Server returned failure status: " + status + "\n" + strbuf.toString());
         }
         return strbuf.toString();
     }
 
-    private String makePayloadHeader(String fieldName, String filename) {
+    /**
+     * Determines the content-type. Sets applicaiton/octet-stream if content type is indeterminable.
+     *
+     * @param fieldName
+     * @param file
+     * @return
+     */
+    private String makePayloadHeader(String fieldName, File file) {
+        String filename = null;
+        try {
+            filename = URLEncoder.encode(file.getName(), charset);
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+
         StringBuilder buf = new StringBuilder(String.format(contentDispositionTmplt, "form-data", fieldName, filename));
         String contentype = URLConnection.guessContentTypeFromName(filename);
-        if (contentype != null) {
-            buf.append(CR).append("Content-Type: " + contentype);
+        if (StringUtils.isEmpty(contentype)) {
+            InputStream taste = null;
+            try {
+                taste = new FileInputStream(file);
+                contentype = URLConnection.guessContentTypeFromStream(taste);
+                taste.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
+        else if (StringUtils.isEmpty(contentype)) {
+            contentype = MediaType.APPLICATION_OCTET_STREAM + "";
+        }
+        buf.append(CR).append("Content-Type: " + contentype);
+
         return buf.toString();
     }
 

@@ -49,18 +49,8 @@ public class MainApp {
 
     private static long lastmod = 0;
 
-    public static URL RESTAPI_HOST;
-    public static URL RESTAPI_ENDPOINT;
     private final ObjectMapper objectMapper;
     private final CloudFSConfiguration serviceConfig;
-
-    private static final int ENOENT = 2;        /* No such file or directory */
-    private static final int EACCES = 13;       /* Permission denied */
-    private static final int EFAULT = 14;       /* Bad address */
-    private static final int EBUSY = 16;        /* Device or resource busy */
-    private static final int ENOTCONN = 107;    /* Transport endpoint is not connected */
-    private static final int ETIMEDOUT = 110;   /* Connection timed out */
-    private static final int EHOSTDOWN = 112;   /* Host is down */
     private final String configFilePath = "/config.json";
 
     public MainApp(String[] args) throws IOException {
@@ -84,15 +74,12 @@ public class MainApp {
             ? InetAddress.getLocalHost().getHostAddress()
             : serviceConfig.getHost());
 
-        this.RESTAPI_HOST = new URL(serviceConfig.getProtocol(), serviceConfig.getHost(), serviceConfig.getPort(), "/");
-
-        this.RESTAPI_ENDPOINT = new URL(RESTAPI_HOST, serviceConfig.getContextUri());
 
         if (! setupWorkDirectory()) {
-            System.exit(ENOENT);
+            System.exit(Constants.ENOENT);
         }
         if (! checkDBConnection()) {
-            System.exit(EHOSTDOWN);
+            System.exit(Constants.EHOSTDOWN);
         }
     }
 
@@ -142,34 +129,28 @@ public class MainApp {
 
         CamelContext camelContext = new DefaultCamelContext(jndiContext);
 //        camelContext.addComponent("activemq", ActiveMQComponent.activeMQComponent("vm://localhost?broker.persistent=false"));
-        ZRouteBuilder zroute = new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
-        camelContext.addRoutes(zroute);
+        ZRouteBuilder zRouteBuilder = new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
+        camelContext.addRoutes(zRouteBuilder);
         camelContext.start();
+        lookupAvailableBuckets(zRouteBuilder);
+    }
 
+    private void lookupAvailableBuckets(ZRouteBuilder zRouteBuilder) throws Exception {
 
-//        String gatewayUri = getHttp4Proto(RESTAPI_ENDPOINT + ZRouteBuilder.LIST_BUCKETS_URI);
-
-        Endpoint gatewayEndpoint = zroute.endpoint("direct:rest.list_buckets");
-
+        Endpoint gatewayEndpoint = zRouteBuilder.endpoint("direct:rest.list_buckets");
         Producer producer = gatewayEndpoint.createProducer();
-//        ProducerTemplate producer = gatewayEndpoint.getCamelContext().createProducerTemplate();
 
-        LOG.info("Sending order");
+        LOG.info("Populating available buckets ...");
         Exchange exchange = gatewayEndpoint.createExchange(ExchangePattern.OutOnly);
-//        exchange.getIn().setHeader(Constants.AUTHORIZATION, authAgent.getAuthResponse().getAuthorizationToken());
-//        exchange.getIn().setHeader(Exchange.HTTP_METHOD, HttpMethods.POST);
         producer.process(exchange);
-
-        Message out = exchange.getOut();
-
 
         BucketListResponse buckets = JsonHelper.coerceClass(objectMapper, exchange.getOut(), BucketListResponse.class);
 
         MirrorMap<String, String> bucketIdNameMap = new MirrorMap<String, String>(
-            buckets.getBuckets().stream().collect(Collectors.toMap(B2Bucket::getBucketId, B2Bucket::getBucketName))
+                buckets.getBuckets().stream().collect(Collectors.toMap(B2Bucket::getBucketId, B2Bucket::getBucketName))
         );
 
-        zroute.setBucketMap(bucketIdNameMap);
+        zRouteBuilder.setBucketMap(bucketIdNameMap);
     }
 
 //    private String readStream(InputStream stream) throws IOException {

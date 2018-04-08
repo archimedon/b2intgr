@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 
 
-JAVA_CMD="`which java` -jar"
-
-QUEUE_PORT=${Q_PORT:-8080}
-WEB_PORT=${PORT:-80}
-
-
 read_dom () {
     local IFS=\>
     read -d \< ENTITY CONTENT
@@ -17,6 +11,11 @@ read_dom () {
 }
 
 get_target_name () {
+
+    pomf=${1:-pom.xml}
+
+    fatal_check_file $pomf
+
     let CTR=0
     JARNAME=''
     JVER=''
@@ -38,112 +37,95 @@ get_target_name () {
             echo "${JARNAME}-${JVER}.${JPKG}"
             break;
         fi
-    done < 'pom.xml'
-}
-
-function start_node {
-
-    DIRP=0
-    NODE_CMD="`which npm`"
-
-    if [ -z "NODE_CMD" ]; then
-        echo STDERR "[WARN] 'npm' command not found"
-        NODE_CMD="`which node`"
-    fi
-
-    if [ -z "NODE_CMD" ]; then
-        echo STDERR "[ERROR] 'node' command not found"
-    fi
-
-    if [ ! -z "NODE_CMD" ]; then
-        if [ -z "$1" ]; then
-            cd $1
-            DIRP=1
-        fi
-        $NODE_CMD 1>&2 &
-        let PID=$!
-        echo -n $PID > $NODE_PIDFILE
-        [ $DIRP -eq 1 ] && cd -
-    fi
-
-# echo "$PID" >&2
-#    if nc -z localhost $WEB_PORT; then
-#      echo  port $WEB_PORT is not free! >&2
-#      echo  Attempting shutdown! >&2
-##        stop_node
-#      PID=`ps -eo 'tty pid args' | grep 'node' | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
-#
-#      echo  "NODE PID: $PID" >&2
-#
-#      ps -p $PID >/dev/null 2>&1
-#      if [ $? -eq 0 ] ; then
-#        kill -9 $PID >/dev/null 2>&1
-#      fi
-#    fi
-#
-#    exec "$NODE_CMD" &
-#    let PID=$!
-#    echo  $PID >&2
-#
-#	## Store PID
-#    echo  -n $PID > $NODE_PIDFILE >&2
-#	echo  "Starting 'Node' (pid: ${PID}) ..." >&2
-#	return $PID
+    done < $pomf
 }
 
 
+fatal_check_file () {
 
-function stop_zqueue {
-
-  PID=''
-
-  if [ ! -z "$ZQUEUE_PIDFILE" ] && [ -f $ZQUEUE_PIDFILE ]; then
-      PID=`cat "$ZQUEUE_PIDFILE"`
-      while [ $SLEEP -ge 0 ]; do
-        kill -9 "$PID" >/dev/null 2>&1
-        if [ $? -gt 0 ]; then
-          rm -f "$ZQUEUE_PIDFILE" >/dev/null 2>&1
-          echo  "Killed Process: $PID" >&2
-          return 0
-        else
-          sleep $SLEEP
-          ((SLEEP-=1))
-        fi
-      done
-  else
-
-      PID=`ps -eo 'tty pid args' | grep "$target_name" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
-
-      if [ ! -z "$PID" ]; then
-         echo  "Killed Process: $PID"
-       kill -KILL $PID >/dev/null 2>&1
-      fi
-
-      PID=`ps -eo 'tty pid args' | grep "$PRG" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
-      if [ ! -z "$PID" ]; then
-        ps -p $PID >/dev/null 2>&1
-        if [ $? -eq 0 ] ; then
-           echo  "Killing process: $PID" >&2
-           kill -9 $PID 1>/dev/null
-        fi
-      fi
-
-  fi
+    if [ ! -f "$1" ]; then
+        echo "File '$1' not found";
+        exit 2;
+    fi
+    return 0;
 }
 
 
-function start_zqueue {
-#while [[ nc -z localhost $QUEUE_PORT && $max_tries -ne 0 ]]; do
-    if nc -z localhost $QUEUE_PORT; then
-        # port $QUEUE_PORT is not open! >&2
-        stop_zqueue
+stop_zqueue () {
+
+	pid=''
+	let running=1
+
+	if [ ! -z "$ZQUEUE_PIDFILE" ] && [ -f $ZQUEUE_PIDFILE ]; then
+
+		let SLEEP=4
+		pid=`cat "$ZQUEUE_PIDFILE"`
+		while [ $SLEEP -ge 0 ] && [ -f "$ZQUEUE_PIDFILE" ]; do
+
+			kill -9 "$pid"
+
+			if [ $? -eq 0 ]; then
+				rm -f "$ZQUEUE_PIDFILE"  2>&1
+				echo  "Killed Process: $pid" >&2
+				return 0
+			else
+				sleep $SLEEP
+				((SLEEP-=1))
+			fi
+		done
+	else
+
+		pid=`ps -eo 'tty pid args' | grep "$B2_JARFILE" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
+
+		if [ ! -z "$pid" ]; then
+			echo  "Killed Process: $pid"
+			kill -KILL $pid  2>&1
+		fi
+
+		pid=`ps -eo 'tty pid args' | grep "$PRG" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
+		if [ ! -z "$pid" ]; then
+			ps -p $pid  2>&1
+			if [ $? -eq 0 ]; then
+				echo  "Killing process: $pid" >&2
+				kill -9 $pid 1
+				return 0
+			fi
+		fi
+
+	fi
+}
+
+start_zqueue () {
+
+	nc -z localhost $QUEUE_PORT >/dev/null 2>&1;
+
+    if [ $? -eq 0 ]; then
+
+		echo "Already running on port: ${QUEUE_PORT}" >&2
+		exit 0
+
+        # port $QUEUE_PORT is not available! >&2
+		# stop_zqueue
     fi
 
-    ${JAVA_CMD} $JTARGET "$@" &
+    ${JRE_CMD} $B2_TARGET "$@" &
 
-    let QUEUE_PID=$!
+    let pid=$!
 	## Store PID
-    echo  -n $QUEUE_PID > $ZQUEUE_PIDFILE
-	echo  "Starting 'Router' (pid: ${QUEUE_PID}) ..." >&2
+    echo  -n $pid > $ZQUEUE_PIDFILE
+	echo  "Starting 'Router' (pid: ${pid}) ..." >&2
+}
+
+
+test_zqueue () {
+
+	nc -z localhost $QUEUE_PORT >/dev/null 2>&1
+
+    if [ $? -eq 0 ]; then
+		echo "Application is running. Exiting ..." >&2
+		exit 1
+	fi
+
+	$MAVEN clean test --file $B2_HOME
 }
 

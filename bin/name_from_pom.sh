@@ -4,6 +4,10 @@
 # Usage:
 #   getMvnTarget [ path/to/pom.xml ]
 
+PRG=`basename "$0"`
+BIN_DIR="`dirname $0`"
+
+source $BIN_DIR/functions.sh
 
 pom_file=${1:-'pom.xml'}
 

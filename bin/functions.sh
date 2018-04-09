@@ -51,47 +51,77 @@ fatal_check_file () {
 }
 
 
+fatal_check_bolt () {
+# 'bolt://localhost:7476'
+	pid=''
+	if [ -z $1 ]; then
+		bport='bolt://localhost:7476'
+	else
+		bport=$1
+	fi
+
+
+	path_regex="\:([0-9]+)"
+
+	[[ $bport =~ $path_regex ]] && bport="${BASH_REMATCH[1]}";
+
+	nc -z localhost $bport >/dev/null 2>&1;
+
+    if [ $? -eq 1 ]; then
+        echo "Bolt not running";
+        exit 3;
+	fi
+
+    return 0;
+}
+
 stop_zqueue () {
 
 	pid=''
-	let running=1
 
-	if [ ! -z "$ZQUEUE_PIDFILE" ] && [ -f $ZQUEUE_PIDFILE ]; then
+	nc -z localhost $QUEUE_PORT >/dev/null 2>&1;
 
-		let SLEEP=4
-		pid=`cat "$ZQUEUE_PIDFILE"`
-		while [ $SLEEP -ge 0 ] && [ -f "$ZQUEUE_PIDFILE" ]; do
+    if [ $? -eq 0 ]; then
 
-			kill -9 "$pid"
+		if [ ! -z "$ZQUEUE_PIDFILE" ] && [ -f $ZQUEUE_PIDFILE ]; then
 
-			if [ $? -eq 0 ]; then
-				rm -f "$ZQUEUE_PIDFILE"  2>&1
-				echo  "Killed Process: $pid" >&2
-				return 0
-			else
-				sleep $SLEEP
-				((SLEEP-=1))
+			let SLEEP=4
+			pid=`cat "$ZQUEUE_PIDFILE"`
+			while [ $SLEEP -ge 0 ] && [ -f "$ZQUEUE_PIDFILE" ]; do
+
+				kill -9 "$pid"
+
+				if [ $? -eq 0 ]; then
+					rm -f "$ZQUEUE_PIDFILE"  2>&1
+					echo  "Killed Process: $pid" >&2
+					return 0
+				else
+					sleep $SLEEP
+					((SLEEP-=1))
+				fi
+			done
+		else
+
+			pid=`ps -eo 'tty pid args' | grep "$B2_JARFILE" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
+
+			if [ ! -z "$pid" ]; then
+				echo  "Killed Process: $pid"
+				kill -KILL $pid  2>&1
 			fi
-		done
+
+			pid=`ps -eo 'tty pid args' | grep "$PRG" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
+			if [ ! -z "$pid" ]; then
+				ps -p $pid  2>&1
+				if [ $? -eq 0 ]; then
+					echo  "Killing process: $pid" >&2
+					kill -9 $pid 1
+					return 0
+				fi
+			fi
+
+		fi
 	else
-
-		pid=`ps -eo 'tty pid args' | grep "$B2_JARFILE" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
-
-		if [ ! -z "$pid" ]; then
-			echo  "Killed Process: $pid"
-			kill -KILL $pid  2>&1
-		fi
-
-		pid=`ps -eo 'tty pid args' | grep "$PRG" | grep -v grep | tr -s ' ' | cut -f2 -d ' '`
-		if [ ! -z "$pid" ]; then
-			ps -p $pid  2>&1
-			if [ $? -eq 0 ]; then
-				echo  "Killing process: $pid" >&2
-				kill -9 $pid 1
-				return 0
-			fi
-		fi
-
+		echo "Not running"
 	fi
 }
 
@@ -126,6 +156,12 @@ test_zqueue () {
 		exit 1
 	fi
 
-	$MAVEN clean test --file $B2_HOME
+    if [ "$B2_HOME" == "." ]; then
+	    $MAVEN clean test
+    else
+    	$MAVEN clean test --file $B2_HOME
+    fi
+
+    exit 0;
 }
 

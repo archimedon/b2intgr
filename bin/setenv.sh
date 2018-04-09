@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-MYDIR=$(dirname $0)
-B2_HOME=$(dirname $MYDIR)
+BIN_DIR=$(dirname $0)
+B2_HOME=$(dirname $BIN_DIR)
 
 B2_RELBASE=$B2_HOME
 
@@ -13,7 +13,7 @@ if [ ! -d "${B2_HOME}/run" ]; then
 	mkdir -p ${B2_HOME}/run
 fi
 
-CMD="${B2_HOME}/bin/name_from_pom.sh"
+CMD="${BIN_DIR}/name_from_pom.sh"
 
 B2_JARFILE=$($CMD ${B2_HOME}/pom.xml)
 

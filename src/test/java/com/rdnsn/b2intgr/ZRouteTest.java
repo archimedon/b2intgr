@@ -91,7 +91,7 @@ public class ZRouteTest extends CamelTestSupport {
     @Override
     public RouteBuilder createRouteBuilder() throws Exception
     {
-        LOG.info("Create RouteBuilder" + "[ ! -f .b2conf ] && [ -f .env ] && eval $(source .env; echo B2_HOME=\"$B2_HOME\";); ${B2_HOME:-workers/b2intgr}/bin/setenv.sh $PWD;");
+        LOG.info("Create RouteBuilder");
         this.zRouteBuilder = new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
         return zRouteBuilder;
 

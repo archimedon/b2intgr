@@ -25,16 +25,17 @@ B2_TARGET=${B2_HOME}/target/${B2_JARFILE}
 # Reset conf
 echo -n '' > .b2conf
 
-grep 'B2_HOME' .b2conf || echo "B2_HOME=${B2_HOME}" >> .b2conf
-grep 'B2_RUN' .b2conf || echo "B2_RUN=${B2_HOME}/run" >> .b2conf
-grep 'B2_RELBASE' .b2conf || echo "B2_RELBASE=${B2_RELBASE}" >> .b2conf
-grep 'B2_JARFILE' .b2conf || echo "B2_JARFILE=${B2_JARFILE}" >> .b2conf
-grep 'B2_TARGET' .b2conf || echo "B2_TARGET=${B2_TARGET}" >> .b2conf
+grep 'B2_HOME' .b2conf >/dev/null || echo "B2_HOME=${B2_HOME}" >> .b2conf
+grep 'B2_RUN' .b2conf >/dev/null || echo "B2_RUN=${B2_HOME}/run" >> .b2conf
+grep 'B2_RELBASE' .b2conf >/dev/null || echo "B2_RELBASE=${B2_RELBASE}" >> .b2conf
+grep 'B2_JARFILE' .b2conf >/dev/null || echo "B2_JARFILE=${B2_JARFILE}" >> .b2conf
+grep 'B2_TARGET' .b2conf >/dev/null || echo "B2_TARGET=${B2_TARGET}" >> .b2conf
 
 setFromEnv () {
 	for vline in `env | grep -i '^(GRAPHENE|SENDGRID)'`; do
 		vname=$(echo $vline | cut -d'=' -f 1)
-		grep $vname .b2conf || echo "$vline" >> .b2conf
+		export "$vline"
+		grep $vname .b2conf >/dev/null || echo "$vline" >> .b2conf
 	done
 }
 
@@ -43,8 +44,8 @@ setFromEnvFile () {
 
     for vline in $(fgrep -E '^(GRAPHENE|SENDGRID|B2)' $envfile); do
         vname=$(echo $vline | cut -d'=' -f 1)
-    #	echo $vline;
-        grep $vname .b2conf || echo "$vline" >> .b2conf
+		export "$vline"
+        grep $vname .b2conf  >/dev/null || echo "$vline" >> .b2conf
     done
 }
 

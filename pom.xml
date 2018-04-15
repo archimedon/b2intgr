@@ -7,8 +7,7 @@
     <groupId>com.rdnsn</groupId>
     <artifactId>b2intgr</artifactId>
     <packaging>jar</packaging>
-    <version>0.0.1</version>
-
+    <version>0.9</version>
     <name>ZCloudFS</name>
 
     <properties>

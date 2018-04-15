@@ -1,6 +1,19 @@
-/target/
+# IntelliJ
+*.iml
 .idea
+
+# Eclipse
+.settings
 .classpath
 .project
-.dependency-reduced-pom.xml
+
+# Node modules
+node_modules
+
+# Maven - Java build
+target
+dependency-reduced-pom.xml
+
+# OSX
+.DS_Store
 

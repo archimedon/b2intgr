@@ -37,10 +37,9 @@ public class Neo4JConfiguration {
         return urlString;
     }
 
-    public void setUrlString(String urlString)
-    {
+    public void setUrlString(String urlString) throws URISyntaxException {
         if (urlString.indexOf("@") > 1) {
-            try {
+//            try {
                 URI uri = new URI(urlString);
                 String[] tmp = uri.getUserInfo().split(":");
                 setUsername(tmp[0]);
@@ -51,9 +50,9 @@ public class Neo4JConfiguration {
                String path, String query, String fragment)
                  */
                 this.urlString = new URI(uri.getScheme(), null, uri.getHost(), uri.getPort(), uri.getPath(), null, null).toString();
-            } catch (URISyntaxException e) {
-                e.printStackTrace();
-            }
+//            } catch (URISyntaxException e) {
+//                e.printStackTrace();
+//            }
         }
         else {
             this.urlString = urlString;

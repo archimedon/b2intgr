@@ -46,12 +46,13 @@ There are 3 ways to configure:
   "maxPoolSize": 10,
   "neo4jConf": {
     // Be sure to use the BOLT server's port
-    "urlString": "bolt://localhost:7476",
+    "urlString": "$GRAPHENEDB_BOLT_URL",
 
     // Set credentials or augment connection string:
     //  "urlString": "bolt://neo4j:reggae@localhost:7375"
-    "username": "neo4j",
-    "password": "reggae"
+    "username": "$GRAPHENEDB_BOLT_USER",
+    "password": "$GRAPHENEDB_BOLT_PASSWORD"
+
   },
   "mailConfig": {
     "host": "smtp.gmail.com",

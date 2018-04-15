@@ -43,7 +43,7 @@ import static com.rdnsn.b2intgr.route.ZRouteBuilder.getHttp4Proto;
  * Initialize and start the camel routes
  */
 public class MainApp {
-    private static final Logger LOG = LoggerFactory.getLogger(MainApp.class);
+    private static final Logger log = LoggerFactory.getLogger(MainApp.class);
 
     private static final long TTL = (12 * 60 * 60) - 10;
 
@@ -63,7 +63,7 @@ public class MainApp {
 
         this.serviceConfig = new Configurator(objectMapper).getConfiguration();
 
-        LOG.debug(serviceConfig.toString());
+        log.debug(serviceConfig.toString());
         // Update Host setting in config if NULL
         serviceConfig.setHost(StringUtils.isEmpty(serviceConfig.getHost())
             ? InetAddress.getLocalHost().getHostAddress()
@@ -82,14 +82,14 @@ public class MainApp {
         File f = new File(serviceConfig.getDocRoot());
         if (!f.exists()) {
             if (f.mkdirs()){
-                LOG.info("Made DocRoot directory '{}'", f.getPath());
+                log.info("Made DocRoot directory '{}'", f.getPath());
                 return true;
             }
             else {
                 throw new RuntimeException("Make DocRoot directory failed: " + f.getPath());
             }
         } else {
-            LOG.info("DocRoot directory exists: '{}'", f.getPath());
+            log.info("DocRoot directory exists: '{}'", f.getPath());
             return true;
         }
     }
@@ -135,7 +135,7 @@ public class MainApp {
         Endpoint gatewayEndpoint = zRouteBuilder.endpoint("direct:rest.list_buckets");
         Producer producer = gatewayEndpoint.createProducer();
 
-        LOG.info("Populating available buckets ...");
+        log.info("Populating available buckets ...");
         Exchange exchange = gatewayEndpoint.createExchange(ExchangePattern.OutOnly);
         producer.process(exchange);
 
@@ -149,7 +149,7 @@ public class MainApp {
     }
 
     private void writeConnectionString() throws Exception {
-        LOG.info("Listening on: " +
+        log.info("Listening on: " +
             new URL("http", serviceConfig.getHost(), serviceConfig.getPort(), serviceConfig.getContextUri())
         );
     }

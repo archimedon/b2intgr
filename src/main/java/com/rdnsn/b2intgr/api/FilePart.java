@@ -120,14 +120,10 @@ public class FilePart  implements Comparable<FilePart> {
         return this;
     }
 
-    public String getContentSha1() {
+    public String getContentSha1() throws IOException {
         if (StringUtils.isEmpty(contentSha1)) {
-            try {
                 contentSha1 = sha1(this.getData());
 
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         }
         return contentSha1;
     }

@@ -124,7 +124,7 @@ public class ZRouteBuilder extends RouteBuilder {
             this.RESTAPI_HOST = new URL(serviceConfig.getProtocol(), serviceConfig.getHost(), serviceConfig.getPort(), "/");
             this.RESTAPI_ENDPOINT = new URL(RESTAPI_HOST, serviceConfig.getContextUri());
         } catch (MalformedURLException e) {
-            e.printStackTrace();
+            log.error(e.getMessage(), e);
         }
 
 
@@ -257,11 +257,6 @@ public class ZRouteBuilder extends RouteBuilder {
             String sent = IOUtils.toString(exchange.getIn().getBody(InputStream.class), StandardCharsets.UTF_8);
 
             // RAW DUMP
-//            System.err.println("\n\n-------------------------------\n");
-//            System.err.println(sent);
-//            System.err.println("\n-------------------------------\n\n");
-//            System.err.println("upl headers:\n\t" + exchange.getIn().getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
-
             // Echo
             exchange.getOut().copyFromWithNewBody(exchange.getIn(), sent);
         });
@@ -514,7 +509,13 @@ public class ZRouteBuilder extends RouteBuilder {
                     if (  parts.stream().map(part -> ! part.isUnread()).reduce(true, (a, b) -> a && b) ) {
                         parts.get(0).getFileChannel().close();
                         List shas = new ArrayList(parts.size());
-                        parts.forEach(part -> shas.add(part.getContentSha1()));
+                        parts.forEach(part -> {
+                            try {
+                                shas.add(part.getContentSha1());
+                            } catch (IOException e) {
+                                log.error(e.getMessage(), e);
+                            }
+                        });
 
                         final JsonObject finishUploadBody = new JsonObject();
                         finishUploadBody.put("fileId", uploadResponse.getFileId());
@@ -885,7 +886,7 @@ public class ZRouteBuilder extends RouteBuilder {
         public void process(Exchange exchange) throws B2BadRequestException {
 
             final Message messageIn = exchange.getIn();
-            log.debug("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entry -> entry.getKey() + " ::: " + entry.getValue()).collect(Collectors.joining("\n")));
+            log.debug("upl headers: {}", messageIn.getHeaders().entrySet().stream().map(entry -> entry.getKey() + ": " + entry.getValue()).collect(Collectors.joining(" <> ")));
             MediaType mediaType = messageIn.getHeader(Exchange.CONTENT_TYPE, MediaType.class);
 
 
@@ -941,7 +942,7 @@ public class ZRouteBuilder extends RouteBuilder {
                             partialPath = URLEncoder.encode(pathFromUser + File.separatorChar + item.getName(), Constants.UTF_8)
                                     .replaceAll("%2F", "/");
                         } catch (UnsupportedEncodingException e) {
-                            e.printStackTrace();
+                           log.error(e.getMessage(), e);
                         }
 
                         log.debug("partialPath: {}", partialPath);
@@ -952,13 +953,13 @@ public class ZRouteBuilder extends RouteBuilder {
                         try {
                             Files.createDirectories(destination.getParent());
                         } catch (IOException e) {
-                            e.printStackTrace();
+                           log.error(e.getMessage(), e);
                         }
 
                         try {
                             Files.copy(item.getInputStream(), destination, StandardCopyOption.REPLACE_EXISTING);
                         } catch (IOException e) {
-                            e.printStackTrace();
+                           log.error(e.getMessage(), e);
                         }
                         log.debug("copied: {} to ", item.getFieldName(), destination);
 
@@ -1071,7 +1072,7 @@ public class ZRouteBuilder extends RouteBuilder {
                     parts.add(new FilePart( fileChannel, start, chunkSize, partNo ));
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+               log.error(e.getMessage(), e);
             }
             log.debug("parts: " + parts);
             exchange.getIn().setHeader("numParts", partNo - 1);

@@ -53,7 +53,7 @@ public class BasicHttpClient {
             // Enable streaming mode with default settings
             // http.setFixedLengthStreamingMode(len);
         } catch (IOException e) {
-            e.printStackTrace();
+           log.error(e.getMessage(), e);
         }
     }
 
@@ -156,7 +156,7 @@ public class BasicHttpClient {
         try {
             filename = URLEncoder.encode(file.getName(), charset);
         } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
+           log.error(e.getMessage(), e);
         }
 
         StringBuilder buf = new StringBuilder(String.format(contentDispositionTmplt, "form-data", fieldName, filename));
@@ -168,7 +168,7 @@ public class BasicHttpClient {
                 contentype = URLConnection.guessContentTypeFromStream(taste);
                 taste.close();
             } catch (IOException e) {
-                e.printStackTrace();
+               log.error(e.getMessage(), e);
             }
         }
         else if (StringUtils.isEmpty(contentype)) {
@@ -189,7 +189,7 @@ public class BasicHttpClient {
         try {
             baout.write(org.apache.commons.io.IOUtils.toByteArray(fins));
         } catch (IOException e) {
-            e.printStackTrace();
+           log.error(e.getMessage(), e);
         }
         return out;
     }

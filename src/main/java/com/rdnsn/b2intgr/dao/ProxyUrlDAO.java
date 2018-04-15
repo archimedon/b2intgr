@@ -28,7 +28,7 @@ import static org.neo4j.driver.v1.Values.value;
  */
 public class ProxyUrlDAO implements AutoCloseable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ProxyUrlDAO.class);
+    private static final Logger log = LoggerFactory.getLogger(ProxyUrlDAO.class);
 
     private Driver driver;
     private final ObjectMapper objectMapper;
@@ -37,8 +37,9 @@ public class ProxyUrlDAO implements AutoCloseable {
         this.objectMapper = objectMapper;
         try {
             driver = GraphDatabase.driver(conf.getUrlString(), AuthTokens.basic(conf.getUsername(), conf.getPassword()));
-        } catch (ServiceUnavailableException sue) {
-            throw new RuntimeException("Unable to connect to: " + conf.getUrlString());
+        } catch (Exception ex) {
+            log.error(ex.getMessage(), ex);
+            driver = null;
         }
     }
 
@@ -57,7 +58,7 @@ public class ProxyUrlDAO implements AutoCloseable {
             session.close();
         } catch (Exception e) {
             stat = false;
-            LOG.error(e.getMessage());
+            log.error(e.getMessage());
         } finally {
             if (driver != null) {
                 close();
@@ -96,7 +97,7 @@ public class ProxyUrlDAO implements AutoCloseable {
                                 " RETURN id(p)";
 
 
-                        LOG.debug("valMap: {}", valMap);
+                        log.debug("valMap: {}", valMap);
 
                         result = tx.run(
                                 updateCypher,
@@ -104,8 +105,8 @@ public class ProxyUrlDAO implements AutoCloseable {
                                 value(valMap)
                         );
                         idResult = result.single().get(0).asLong();
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                    } catch (Exception ex) {
+                        log.error(ex.getMessage(), ex);
                     }
                 } else {
                     String createCypher = String.format("CREATE (p:ProxyUrl %s) RETURN id(p)", message.toCypherJson());
@@ -134,7 +135,7 @@ public class ProxyUrlDAO implements AutoCloseable {
                     Record res = result.single();
                     found = res.size() > 0 ? res.get(0).asString() : null;
 
-                    LOG.debug("found: '{}'", found);
+                    log.debug("found: '{}'", found);
 
                 }
 
@@ -149,8 +150,8 @@ public class ProxyUrlDAO implements AutoCloseable {
         try (Session session = getSession()) {
             Integer resData = session.writeTransaction((Transaction tx) -> {
 
-                LOG.debug("proxyUrl.getProxy(): {} ", proxyUrl.getProxy());
-                LOG.debug("proxyUrl.getFileId(): {} ", proxyUrl.getFileId());
+                log.debug("proxyUrl.getProxy(): {} ", proxyUrl.getProxy());
+                log.debug("proxyUrl.getFileId(): {} ", proxyUrl.getFileId());
 
                 StatementResult result = tx.run("MATCH (p:ProxyUrl) WHERE " +
                                 "p.proxy = $purl AND " +
@@ -167,7 +168,7 @@ public class ProxyUrlDAO implements AutoCloseable {
                     Record res = result.single();
                     found = res.size() > 0 ? res.get(0).asInt() : null;
 
-                    LOG.debug("found: '{}'", found);
+                    log.debug("found: '{}'", found);
 
                 }
                 return found;
@@ -192,13 +193,9 @@ public class ProxyUrlDAO implements AutoCloseable {
 
                     Record res = result.single();
                     if (res.size() > 0) {
-                        try {
-                            HashMap map = new HashMap(res.get(0).asMap() );
-                            copyProperties(found, map);
-                            LOG.debug("found: '{}'", found);
-                        } catch (Exception e) {
-                            LOG.error(e.getMessage(), e);
-                        }
+                        HashMap map = new HashMap(res.get(0).asMap() );
+                        copyProperties(found, map);
+                        log.debug("found: '{}'", found);
                     }
                 }
 
@@ -219,15 +216,8 @@ public class ProxyUrlDAO implements AutoCloseable {
                     field.setAccessible(true); // for private fields
                     field.set(found, entry.getValue()); // set the field's value for your object
                 }
-            } catch (NoSuchFieldException | SecurityException e) {
-                e.printStackTrace();
-                // handle
-            } catch (IllegalArgumentException e) {
-                e.printStackTrace();
-                // handle
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-                // handle
+            } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e) {
+                log.error(e.getMessage(), e);
             }
         }
     }

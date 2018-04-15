@@ -19,33 +19,31 @@ B2_JARFILE=$($CMD ${B2_HOME}/pom.xml)
 
 B2_TARGET=${B2_HOME}/target/${B2_JARFILE}
 
-# echo '#!/usr/bin/env bash' > .b2conf
-#touch .b2conf
+
+CONFF=${BIN_DIR}/.b2conf
 
 # Reset conf
-echo -n '' > .b2conf
+echo -n '' > $CONFF
 
-grep 'B2_HOME' .b2conf >/dev/null || echo "B2_HOME=${B2_HOME}" >> .b2conf
-grep 'B2_RUN' .b2conf >/dev/null || echo "B2_RUN=${B2_HOME}/run" >> .b2conf
-grep 'B2_RELBASE' .b2conf >/dev/null || echo "B2_RELBASE=${B2_RELBASE}" >> .b2conf
-grep 'B2_JARFILE' .b2conf >/dev/null || echo "B2_JARFILE=${B2_JARFILE}" >> .b2conf
-grep 'B2_TARGET' .b2conf >/dev/null || echo "B2_TARGET=${B2_TARGET}" >> .b2conf
+grep 'B2_HOME' $CONFF >/dev/null || echo "export B2_HOME=${B2_HOME}" >> $CONFF
+grep 'B2_RUN' $CONFF >/dev/null || echo "export B2_RUN=${B2_HOME}/run" >> $CONFF
+grep 'B2_RELBASE' $CONFF >/dev/null || echo "export B2_RELBASE=${B2_RELBASE}" >> $CONFF
+grep 'B2_JARFILE' $CONFF >/dev/null || echo "export B2_JARFILE=${B2_JARFILE}" >> $CONFF
+grep 'B2_TARGET' $CONFF >/dev/null || echo "export B2_TARGET=${B2_TARGET}" >> $CONFF
 
 setFromEnv () {
-	for vline in `env | grep -i '^(GRAPHENE|SENDGRID)'`; do
+	for vline in `env | grep -i '^(GRAPHENE|SENDGRID|JAVA_)'`; do
 		vname=$(echo $vline | cut -d'=' -f 1)
-		export "$vline"
-		grep $vname .b2conf >/dev/null || echo "$vline" >> .b2conf
+		grep $vname $CONFF >/dev/null || echo "export $vline" >> $CONFF
 	done
 }
 
 setFromEnvFile () {
 	envfile=${1:-.env}
 
-    for vline in $(fgrep -E '^(GRAPHENE|SENDGRID|B2)' $envfile); do
+    for vline in $(fgrep -E '^(GRAPHENE|SENDGRID|JAVA_|B2)' $envfile); do
         vname=$(echo $vline | cut -d'=' -f 1)
-		export "$vline"
-        grep $vname .b2conf  >/dev/null || echo "$vline" >> .b2conf
+        grep $vname $CONFF  >/dev/null || echo "export $vline" >> $CONFF
     done
 }
 
@@ -53,8 +51,3 @@ setFromEnv
 if [ -f .env ]; then
 	setFromEnvFile
 fi
-
-# grep 'B2_HOME' .b2conf || echo "export B2_HOME=${B2_HOME}" >> .b2conf
-# echo "echo 1" >> .b2conf
-# exit 0
-#  for i in $(fgrep -E '^(GRAPHENE|B2)' .b2conf); do export $i; done

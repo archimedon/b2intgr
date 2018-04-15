@@ -2,7 +2,7 @@
 
 # Determines the name of the JAR file from the POM.
 # Usage:
-#   getMvnTarget [ path/to/pom.xml ]
+#   bin/name_from_pom.sh [ path/to/pom.xml ]
 
 PRG=`basename "$0"`
 BIN_DIR="`dirname $0`"

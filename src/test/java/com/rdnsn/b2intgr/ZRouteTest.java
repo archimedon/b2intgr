@@ -48,7 +48,7 @@ import static com.rdnsn.b2intgr.util.JsonHelper.sha1;
 
 public class ZRouteTest extends CamelTestSupport {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ZRouteTest.class);
+    private static final Logger log = LoggerFactory.getLogger(ZRouteTest.class);
 
     private static AuthAgent authAgent;
     private static GetUploadUrlResponse getUploadUrlResponse;
@@ -91,7 +91,7 @@ public class ZRouteTest extends CamelTestSupport {
     @Override
     public RouteBuilder createRouteBuilder() throws Exception
     {
-        LOG.info("Create RouteBuilder");
+        log.info("Create RouteBuilder");
         this.zRouteBuilder = new ZRouteBuilder(objectMapper, serviceConfig, authAgent);
         return zRouteBuilder;
 
@@ -111,7 +111,7 @@ public class ZRouteTest extends CamelTestSupport {
 
         this.serviceConfig = new Configurator(objectMapper).getConfiguration(confFile);
 
-        LOG.debug(serviceConfig.toString());
+        log.debug(serviceConfig.toString());
 
         // Override DocRoot for tests
         serviceConfig.setDocRoot(getClass().getResource("/").getPath());
@@ -125,7 +125,7 @@ public class ZRouteTest extends CamelTestSupport {
             lookupAvailableBuckets(this.zRouteBuilder);
 
         } catch (Exception e) {
-            e.printStackTrace();
+           log.error(e.getMessage(), e);
             System.exit(Constants.EFAULT);
         }
 
@@ -139,7 +139,7 @@ public class ZRouteTest extends CamelTestSupport {
         Endpoint gatewayEndpoint = zRouteBuilder.endpoint("direct:rest.list_buckets");
         Producer producer = gatewayEndpoint.createProducer();
 
-        LOG.info("Populating available buckets ...");
+        log.info("Populating available buckets ...");
         Exchange exchange = gatewayEndpoint.createExchange(ExchangePattern.OutOnly);
         producer.process(exchange);
 
@@ -155,7 +155,7 @@ public class ZRouteTest extends CamelTestSupport {
     @Override
     protected JndiContext createJndiContext() throws Exception {
         final JndiContext jndiContext = new JndiContext();
-        LOG.info("Creating JndiContext ...");
+        log.info("Creating JndiContext ...");
 
         ZRouteTest.authAgent = new AuthAgent(serviceConfig.getRemoteAuthenticationUrl(), serviceConfig.getBasicAuthHeader(), this.objectMapper);
         jndiContext.bind("authAgent", authAgent);
@@ -373,7 +373,7 @@ public class ZRouteTest extends CamelTestSupport {
             try {
                 client.addInput(sample.filePath.toFile(), sample.formName);
             } catch (IOException e) {
-                e.printStackTrace();
+               log.error(e.getMessage(), e);
             }
         }
     };
@@ -469,14 +469,14 @@ public class ZRouteTest extends CamelTestSupport {
         File f = new File(serviceConfig.getDocRoot());
         if (!f.exists()) {
             if (f.mkdirs()){
-                LOG.info("Made DocRoot directory " + f.getPath());
+                log.info("Made DocRoot directory " + f.getPath());
                 return true;
             }
             else {
                 throw new RuntimeException("Make DocRoot directory failed: " + f.getPath());
             }
         } else {
-            LOG.info("DocRoot directory exists: " + f.getPath());
+            log.info("DocRoot directory exists: " + f.getPath());
             return true;
         }
     }

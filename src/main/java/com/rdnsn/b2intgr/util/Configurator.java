@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 
 public class Configurator {
 
-    private final Logger LOG = LoggerFactory.getLogger(Configurator.class);
+    private final Logger log = LoggerFactory.getLogger(Configurator.class);
 
     private final String ENV_PREFIX = "B2I_";
     private final String CONFIG_ENV_PATTERN = "\\$([\\w\\_\\-\\.]+)";
@@ -105,9 +105,9 @@ public class Configurator {
                     else {
                         BeanUtils.setProperty(confObject, propName, ev);
                     }
-                    LOG.info("Override config['{}'] with env['{}']", propName , ENV_PREFIX + propName);
+                    log.info("Override config['{}'] with env['{}']", propName , ENV_PREFIX + propName);
                 } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-                    e.printStackTrace();
+                   log.error(e.getMessage(), e);
                 }
             }
         });
@@ -123,7 +123,7 @@ public class Configurator {
         while (m.find()) {
             tmp = System.getenv(m.group(1));
             if (tmp != null && tmp.length() > 0) {
-                LOG.info("Setting: '{}' from environment", m.group(1));
+                log.info("Setting: '{}' from environment", m.group(1));
                 confFile = confFile.replaceAll("\\$" + m.group(1) +"\\b" , tmp);
             }
         }

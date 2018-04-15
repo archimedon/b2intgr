@@ -15,7 +15,7 @@ import java.util.Formatter;
 import java.util.List;
 
 public class JsonHelper {
-    private static final Logger LOG = LoggerFactory.getLogger(JsonHelper.class);
+    private static final Logger log = LoggerFactory.getLogger(JsonHelper.class);
 
     public static <T> T coerceClass(final ObjectMapper objectMapper, final Message rsrcIn, Class<T> type) {
         T obj = null;
@@ -23,7 +23,7 @@ public class JsonHelper {
         try {
             obj = objectMapper.readValue(string, type);
         } catch (IOException e) {
-            LOG.error("Error parsing: '" + string + "'", e);
+            log.error("Error parsing: '" + string + "'", e);
             throw new RuntimeException(e.getCause());
         }
         return obj;
@@ -35,7 +35,7 @@ public class JsonHelper {
         try {
             obj = objectMapper.readValue(string, type);
         } catch (IOException e) {
-            LOG.error("Error parsing: '" + string + "'", e);
+            log.error("Error parsing: '" + string + "'", e);
             throw new RuntimeException(e.getCause());
         }
         return obj;
@@ -46,7 +46,7 @@ public class JsonHelper {
         try {
             obj = objectMapper.readValue(string, type);
         } catch (IOException e) {
-            LOG.error("Error parsing: '" + string + "'", e);
+            log.error("Error parsing: '" + string + "'", e);
             throw new RuntimeException(e.getCause());
         }
         return obj;
@@ -57,7 +57,7 @@ public class JsonHelper {
         try {
             string = objectMapper.writeValueAsString(t);
         } catch (JsonProcessingException e) {
-            LOG.error("Error parsing: '" + string + "'", e);
+            log.error("Error parsing: '" + string + "'", e);
             throw new RuntimeException(e.getCause());
         }
         return string;
@@ -76,7 +76,7 @@ public class JsonHelper {
                 ans = formatter.toString();
             }
         } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
+           log.error(e.getMessage(), e);
         }
         return ans;
     }
@@ -101,7 +101,7 @@ public class JsonHelper {
                 ans = formatter.toString();
             }
         } catch (IOException | NoSuchAlgorithmException e) {
-            e.printStackTrace();
+           log.error(e.getMessage(), e);
         }
         return ans;
     }

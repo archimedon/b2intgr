@@ -4,6 +4,8 @@ PRG=`basename "$0"`
 BIN_DIR="`dirname $0`"
 CMD_SWITCH="$1"
 
+CONFF=${BIN_DIR}/.b2conf
+
 QUEUE_PORT=${QUEUE_PORT:-8080}
 
 APP_DIR="`dirname $BIN_DIR`"
@@ -12,50 +14,45 @@ ZQUEUE_PIDFILE="${APP_DIR}/zqueue.pid"
 
 
 source $BIN_DIR/functions.sh
+$BIN_DIR/setenv.sh
+source $CONFF
 
-## Commands
-JRE_CMD="`which java`"
-$(fatal_check_file $JRE_CMD)
 
-JRE_CMD="${JRE_CMD} -jar"
+if [ "$CMD_SWITCH" == "stop" ]; then
 
-MAVEN="`which mvn`"
+	stop_zqueue
 
-if [ "$CMD_SWITCH" = "stop" ]; then
-    stop_zqueue
-elif [ "$CMD_SWITCH" = "start" ] || [ "$CMD_SWITCH" = "test" ]; then
+elif [ "$CMD_SWITCH" == "start" ]; then
 
-	#	[ ! -f .b2conf ] && $BIN_DIR/setenv.sh
-	$BIN_DIR/setenv.sh
+	if [ ! -f "$B2_TARGET" ]; then
 
-	# B2_HOME, B2_RUN, B2_RELBASE, B2_JARFILE, B2_TARGET
+		echo "building ..."
 
-	# cat .b2conf
+		MAVEN="`which mvn`"
 
-	# B2_HOME, B2_RUN, B2_RELBASE, B2_JARFILE, B2_TARGET
-	# source .b2conf
-
-	for vline in $(fgrep -E '^(GRAPHENE|SENDGRID|B2)' .b2conf); do
-		export $vline
-	done
-
-	fatal_check_bolt $GRAPHENEDB_BOLT_URL
-
-	if [ "$CMD_SWITCH" = "start" ]; then
-		if [ ! -f "$B2_TARGET" ]; then
-			$(fatal_check_file $MAVEN)
-
-			echo "building ..." >&2
-
-			# $MAVEN clean compile package -DskipTests --file $B2_HOME ; #
-			$MAVEN clean compile package -DskipTests --file $B2_HOME  2>&1
+		if [ "$B2_HOME" == "." ]; then
+			MARGS=' -DskipTests '
+		else
+			MARGS=" -DskipTests --file ${B2_HOME}"
 		fi
-		$(start_zqueue) 2>&1 &
-	elif [ "$CMD_SWITCH" = "test" ]; then
-		test_zqueue
+
+		$MAVEN clean compile package${MARGS} 1>&2
 	fi
+
+	[ -f "$B2_TARGET" ] && start_zqueue "$B2_TARGET"
+
+elif [ "$CMD_SWITCH" == "clean" ]; then
+
+		MAVEN="`which mvn`"
+		$MAVEN clean 1>&2
+
+		[ -f "$B2_HOME/dependency-reduced-pom.xml" ] && rm "$B2_HOME/dependency-reduced-pom.xml";
+		[ -d "$B2_HOME/run" ] && rm -rf "$B2_HOME/run";
+
+elif [ "$CMD_SWITCH" == "test" ]; then
+
+	test_zqueue
+
 fi
 
-
-exit 0
-
+[ -f $CONFF ] && rm $CONFF;

@@ -62,7 +62,7 @@ public class AuthAgent implements AggregationStrategy {
             log.debug("Authorization: {}", authResponse.getAuthorizationToken());
             assert(StringUtils.isNotBlank(authResponse.getAuthorizationToken()));
         } catch (IOException e) {
-            e.printStackTrace();
+           log.error(e.getMessage(), e);
         }
 		return this.authResponse;
 	}

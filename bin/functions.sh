@@ -54,18 +54,19 @@ fatal_check_file () {
 fatal_check_bolt () {
 # 'bolt://localhost:7476'
 	pid=''
+	gport=7476
 	if [ -z $1 ]; then
-		bport='bolt://localhost:7476'
+		GRAPHENEDB_BOLT_URL='bolt://localhost:7476'
 	else
-		bport=$1
+		GRAPHENEDB_BOLT_URL=$1
 	fi
 
 
-	path_regex="\:([0-9]+)"
+	path_regex="bolt:\/\/(.+):([0-9]+)"
 
-	[[ $bport =~ $path_regex ]] && bport="${BASH_REMATCH[1]}";
+	[[ $GRAPHENEDB_BOLT_URL =~ $path_regex ]] && ghost="${BASH_REMATCH[1]}" && gport="${BASH_REMATCH[2]}";
 
-	nc -z localhost $bport >/dev/null 2>&1;
+	nc -z $ghost $gport >/dev/null 2>&1;
 
     if [ $? -eq 1 ]; then
         echo "Bolt not running";
@@ -125,25 +126,29 @@ stop_zqueue () {
 	fi
 }
 
-start_zqueue () {
+function start_zqueue () {
+	JAR="$1";
 
-	nc -z localhost $QUEUE_PORT >/dev/null 2>&1;
+	echo -n $! > $ZQUEUE_PIDFILE
 
-    if [ $? -eq 0 ]; then
+ 	nc -z localhost $QUEUE_PORT >/dev/null 2>&1;
 
+	if [ $? -eq 0 ]; then
 		echo "Already running on port: ${QUEUE_PORT}" >&2
-		exit 0
+		return 0
 
-        # port $QUEUE_PORT is not available! >&2
+		# port $QUEUE_PORT is not available! >&2
 		# stop_zqueue
-    fi
+	fi
 
-    ${JRE_CMD} $B2_TARGET "$@" &
+	java $JAVA_TOOL_OPTIONS -jar $JAR &
 
     let pid=$!
-	## Store PID
-    echo  -n $pid > $ZQUEUE_PIDFILE
-	echo  "Starting 'Router' (pid: ${pid}) ..." >&2
+
+ 	## Store PID
+	echo  -n $pid > $ZQUEUE_PIDFILE
+
+ 	echo  "Starting 'Router' (pid: ${pid}) ..." >&2
 }
 
 
@@ -153,15 +158,14 @@ test_zqueue () {
 
     if [ $? -eq 0 ]; then
 		echo "Application is running. Exiting ..." >&2
-		exit 1
+		return 0
 	fi
 
-    if [ "$B2_HOME" == "." ]; then
-	    $MAVEN clean test
-    else
-    	$MAVEN clean test --file $B2_HOME
-    fi
+	MAVEN="`which mvn`"
 
-    exit 0;
+    $MAVEN clean test [ "$B2_HOME" == "." ] && '' || "--file $B2_HOME"
+
+
+    return 0;
 }
 

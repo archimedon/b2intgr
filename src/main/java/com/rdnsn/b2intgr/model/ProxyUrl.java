@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.collect.ImmutableMap;
+import com.rdnsn.b2intgr.exception.DAOException;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
@@ -50,6 +52,51 @@ public class ProxyUrl {
     @JsonIgnore
     private transient Long transientId;
 
+    class QueryBuilder {
+        StringBuilder buf = new StringBuilder();
+
+        boolean isEmpty() {
+            return buf.length() == 0;
+        }
+        public StringBuilder append(String str) {
+            if (! isEmpty()) buf.append(" AND ");
+            buf.append(str);
+            return buf;
+        }
+        public String toString() {
+            return buf.toString();
+        }
+    }
+
+// initial response:
+// {sha1=5ae142f61dc516132c96defa015fde36209b5b24, actual=null, proxy=testing/68b-img/68b-img.gif,
+// b2Complete=false, bucketType=null, size=68, bucketId=2ab327a44f788e635ef20613, contentType=image/gif,
+// fileId=null}
+    public String genIdCondition(String alias) throws DAOException{
+
+        QueryBuilder q = new QueryBuilder();
+
+        if (transientId != null) {
+            q.append(String.format("ID(%s)=%d", alias, transientId));
+        }
+        else {
+            if (fileId != null) {
+                q.append(String.format("%s.fileId=\"%s\"", alias, fileId));
+            } else if (StringUtils.isNotBlank(bucketId) && ( StringUtils.isNotBlank(sha1) ||  StringUtils.isNotBlank(proxy) )) {
+                q.append(String.format("%s.bucketId=\"%s\"", alias, bucketId));
+                if ( StringUtils.isNotBlank(sha1)) {
+                    q.append(String.format("%s.sha1=\"%s\"", alias, sha1));
+                }
+                else if ( StringUtils.isNotBlank(proxy)) {
+                    q.append(String.format("%s.proxy=\"%s\"", alias, proxy));
+                }
+            }
+            else {
+                throw new DAOException("Require an ID (`fileID`| `transientId`) or a unique composite that includes 'bucketId'");
+            }
+        }
+        return q.toString();
+    }
 
     public ProxyUrl() {
         super();

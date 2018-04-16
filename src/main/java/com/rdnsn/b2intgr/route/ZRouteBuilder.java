@@ -724,6 +724,8 @@ public class ZRouteBuilder extends RouteBuilder {
         from("direct:remove_proxy")
                 .process((Exchange exchange) -> {
                     FileResponse fileIn = exchange.getIn().getBody(FileResponse.class);
+
+                    if (fileIn.getStatus() == null ) {
                         try (ProxyUrlDAO proxyMapUpdater = getProxyUrlDao()) {
 
                             log.debug("fileIn.getFileName(): {} ", fileIn.getFileName());
@@ -731,12 +733,15 @@ public class ZRouteBuilder extends RouteBuilder {
 
 
                             proxyMapUpdater.deleteMapping(
-                                 new ProxyUrl().setFileId(fileIn.getFileId())
-                                     .setProxy(fileIn.getFileName()));
+                                    new ProxyUrl()
+                                            .setBucketId(fileIn.getBucketId())
+                                            .setFileId(fileIn.getFileId())
+                                            .setProxy(fileIn.getFileName()));
 
                         } catch (Exception e) {
-                            throw makeBadRequestException(e, exchange, "DB update error." , 500);
+                            throw makeBadRequestException(e, exchange, "DB update error.", 500);
                         }
+                    }
 
                 })
                 .end();

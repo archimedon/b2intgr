@@ -2,6 +2,7 @@ package com.rdnsn.b2intgr.dao;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rdnsn.b2intgr.Neo4JConfiguration;
+import com.rdnsn.b2intgr.exception.DAOException;
 import com.rdnsn.b2intgr.model.ProxyUrl;
 import org.apache.commons.beanutils.BeanUtils;
 import org.apache.commons.beanutils.PropertyUtils;
@@ -15,13 +16,15 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.neo4j.driver.v1.Values.parameters;
 import static org.neo4j.driver.v1.Values.value;
 
 /**
- * TODO: 3/6/18 Need to replace the entire connection architecture... it's innefficient but does not slow any processes
+ * TODO: 3/6/18 Need to replace the entire connection architecture...
+ * it's inefficient but does not slow any processes
  *
  * Represents a proxy URL.
  *
@@ -67,13 +70,12 @@ public class ProxyUrlDAO implements AutoCloseable {
         }
     }
 
-    public Object saveOrUpdateMapping(final ProxyUrl message) {
+    public Object saveOrUpdateMapping(final ProxyUrl proxyUrl) {
 
-        String findCypher = message.getSha1() == null
-                ? String.format("MATCH (p:ProxyUrl) WHERE p.proxy = \"%s\" RETURN id(p)", message.getProxy())
-                : String.format("MATCH (p:ProxyUrl) WHERE p.sha1 = \"%s\" RETURN id(p)", message.getSha1());
 
         try (Session session = getSession()) {
+            final String findCypher = "MATCH (p:ProxyUrl) WHERE " + proxyUrl.genIdCondition("p") + " RETURN id(p)";
+
             Object resData = session.writeTransaction((Transaction tx) ->
             {
                 Long idResult = null;
@@ -87,47 +89,54 @@ public class ProxyUrlDAO implements AutoCloseable {
                     try {
 
                         // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
-                        Map<String, Object> valMap = objectMapper.readValue(message.toString(), HashMap.class);
+                        Map<String, Object> valMap = objectMapper.readValue(proxyUrl.toString(), HashMap.class);
 
                         String updateCypher = String.format("MATCH (p:ProxyUrl) WHERE id(p) = %d", idResult) +
                                 valMap.entrySet().stream()
-                                        .filter(ent -> ent.getValue() != null)
-                                        .map(ent -> String.format(" SET p.%s = $%s", ent.getKey(), ent.getKey()))
-                                        .collect(Collectors.joining()) +
+                                    .filter(ent -> ent.getValue() != null)
+                                    .map(ent -> String.format(" SET p.%s = $%s", ent.getKey(), ent.getKey()))
+                                    .collect(Collectors.joining()) +
                                 " RETURN id(p)";
-
 
                         log.debug("valMap: {}", valMap);
 
                         result = tx.run(
-                                updateCypher,
-                                // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
-                                value(valMap)
+                            updateCypher,
+                            // TODO: 3/1/18 - this is a shortcut allowing me to add properties without having to update the input
+                            value(valMap)
                         );
                         idResult = result.single().get(0).asLong();
                     } catch (Exception ex) {
                         log.error(ex.getMessage(), ex);
                     }
                 } else {
-                    String createCypher = String.format("CREATE (p:ProxyUrl %s) RETURN id(p)", message.toCypherJson());
+                    String createCypher = String.format("CREATE (p:ProxyUrl %s) RETURN id(p)", proxyUrl.toCypherJson());
 
                     idResult = tx.run(createCypher).single().get(0).asLong();
                 }
                 return idResult;
             });
             return resData;
+        } catch (DAOException e) {
+            e.printStackTrace();
         }
+        return null;
     }
 
-    public String getActual(final ProxyUrl message) {
+    public String getActual(final ProxyUrl proxyUrl) {
 
         try (Session session = getSession()) {
             String resData = session.writeTransaction((Transaction tx) ->
             {
 
 
-                StatementResult result = tx.run("MATCH (p:ProxyUrl) WHERE p.proxy = $purl RETURN p.actual",
-                        parameters("purl", message.getProxy()));
+                StatementResult result = null;
+                try {
+                    result = tx.run("MATCH (p:ProxyUrl) WHERE " +
+                                    proxyUrl.genIdCondition("p") + " RETURN p.actual");
+                } catch (DAOException e) {
+                    e.printStackTrace();
+                }
 
                 String found = null;
                 if (result.hasNext()) {
@@ -153,14 +162,13 @@ public class ProxyUrlDAO implements AutoCloseable {
                 log.debug("proxyUrl.getProxy(): {} ", proxyUrl.getProxy());
                 log.debug("proxyUrl.getFileId(): {} ", proxyUrl.getFileId());
 
-                StatementResult result = tx.run("MATCH (p:ProxyUrl) WHERE " +
-                                "p.proxy = $purl AND " +
-                                "p.fileId = $fileId " +
-                                "DELETE p",
-                        parameters(
-                        "purl", proxyUrl.getProxy(),
-                            "fileId", proxyUrl.getFileId()
-                        ));
+                StatementResult result = null;
+                try {
+                    result = tx.run("MATCH (p:ProxyUrl) " +
+                                    "WHERE " + proxyUrl.genIdCondition("p") + " DELETE p");
+                } catch (DAOException e) {
+                    e.printStackTrace();
+                }
 
                 Integer found = null;
                 if (result.hasNext()) {
@@ -186,8 +194,13 @@ public class ProxyUrlDAO implements AutoCloseable {
         try (Session session = getSession()) {
             ProxyUrl resData = session.writeTransaction((Transaction tx) ->
             {
-                StatementResult result = tx.run("MATCH (p:ProxyUrl) WHERE p.proxy = $purl RETURN properties(p)",
-                        parameters("purl", proxyUrl.getProxy()));
+                StatementResult result = null;
+                try {
+                    result = tx.run("MATCH (p:ProxyUrl) WHERE " +
+                                    proxyUrl.genIdCondition("p") + " RETURN properties(p)");
+                } catch (DAOException e) {
+                    e.printStackTrace();
+                }
 
                 if (result.hasNext()) {
 

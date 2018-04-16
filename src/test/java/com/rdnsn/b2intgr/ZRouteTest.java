@@ -168,9 +168,9 @@ public class ZRouteTest extends CamelTestSupport {
      */
     @Test
     public void test0BackBlazeConnect() {
-        assertNotNull("authAgent", authAgent);
-        assertNotNull("authResponse", authAgent.getAuthResponse());
-        assertNotNull("authResponse token", authAgent.getAuthResponse().getAuthorizationToken());
+        assertNotNull("Expects an authAgent", authAgent);
+        assertNotNull("Expect an authResponse", authAgent.getAuthResponse());
+        assertNotNull("Expect an authResponse token", authAgent.getAuthResponse().getAuthorizationToken());
     }
 
     /**
@@ -178,8 +178,10 @@ public class ZRouteTest extends CamelTestSupport {
      */
     @Test
     public void test1DBConnection() {
-        ProxyUrlDAO purl = new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper);
-        boolean ans = purl.isAlive();
+        boolean ans = false;
+        try (ProxyUrlDAO purl = new ProxyUrlDAO(serviceConfig.getNeo4jConf(), objectMapper)) {
+            ans = purl.isAlive();
+        }
         assertTrue("Connection to Neo4j Failed", ans);
     }
 
